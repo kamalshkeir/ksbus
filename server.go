@@ -24,14 +24,14 @@ func NewServer() *Server {
 }
 
 func (s *Server) Subscribe(topic string, fn func(data map[string]any,ch Channel),name ...string) (ch Channel) {
-	if DEBUG && LOG{
+	if DEBUG{
 		klog.Printfs("grSubscribing to %s\n",topic)
 	}
 	return bus.Subscribe(topic, fn,name...)
 }
 
 func (s *Server) Unsubscribe(topic string, ch Channel) {
-	if DEBUG && LOG{
+	if DEBUG{
 		klog.Printfs("grUnsubscribing from %s\n",topic)
 	}
 	if ch.Ch != nil {
@@ -40,7 +40,7 @@ func (s *Server) Unsubscribe(topic string, ch Channel) {
 }
 
 func (s *Server) Publish(topic string, data map[string]any) {
-	if DEBUG && LOG{
+	if DEBUG{
 		klog.Printfs("grPublish: sending %v on %s \n",data,topic)
 	}
 	go s.publishWS(topic, data)
@@ -48,14 +48,14 @@ func (s *Server) Publish(topic string, data map[string]any) {
 }
 
 func (s *Server) RemoveTopic(topic string) {
-	if DEBUG && LOG {
+	if DEBUG {
 		klog.Printfs("grRemoving topic %s\n",topic)
 	}
 	bus.RemoveTopic(topic)
 }
 
 func (s *Server) SendTo(name string, data map[string]any) {
-	if DEBUG && LOG{
+	if DEBUG{
 		klog.Printfs("grSendTo: sending %v on %s \n",data,name)
 	}
 	data["name"]=name

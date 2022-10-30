@@ -2,6 +2,9 @@
 
 # Kbus also handle distributed use cases or loadbalancing bus using a CombinedServer
 
+
+##### you can handle authentication or access to certain topics using to [Before Handlers](#before-handlers)
+
 ##### Python client will be added soon 
 
 ### Internal Bus (No websockets, use channels to handle topic communications)
@@ -245,5 +248,15 @@ func main() {
 		fmt.Println("master recv data= ",data)
 	})
 	bus.Run()
+}
+```
+
+## Before Handlers 
+```go
+kbus.BeforeUpgradeWS=func(r *http.Request) bool {
+	
+}
+kbus.BeforeDataWS=func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool {
+	
 }
 ```

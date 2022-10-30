@@ -7,6 +7,14 @@
 
 ##### Python client will be added soon 
 
+
+## Get Started
+
+```sh
+	go get github.com/kamalshkeir/kbus@v0.0.2
+```
+
+
 ### Internal Bus (No websockets, use channels to handle topic communications)
 
 ```go
@@ -36,6 +44,7 @@ func (s *Server) RunAutoTLS(domainName string, subDomains ...string)
 // param and returned subscribe channel 
 func (ch Channel) Unsubscribe() Channel
 ```
+
 
 ##### Example:
 ```go

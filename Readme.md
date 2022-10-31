@@ -2,6 +2,47 @@
 
 # Kbus also handle distributed use cases or loadbalancing bus using a CombinedServer
 
+#### let's say you have a discord like application for example, think how you can do a broadcast message in realtime to all room members notifying them that a new user joined the room, you can do it using pooling of course, but it's not very efficient, you can use also any broker but it will be hard to subscribe from the browser or html directly
+
+## how you can make it using kbus ?
+
+###### Client side:
+
+```html
+<script>
+let bus = new Bus("localhost:9313");
+bus.autorestart=true;
+this.restartevery=5;
+bus.OnOpen = (e) => {
+    let sub = bus.Subscribe("room-client",(data,subs) => {
+        console.log("data:",data);
+        // show notification
+		...
+    });
+}
+
+btn.addEventListener("click",(e) => {
+    e.preventDefault();
+    // send to only one connection , our go client in this case, so this is a communication between client js and client go
+    bus.SendTo("client:go",{
+        "msg":"hello go client from client js"
+    })
+})
+
+</script>
+```
+###### Server side:
+```go
+bus := kbus.NewServer()
+
+// whenever you register a new user to the room
+bus.Publish("room-client",map[string]any{
+	....
+})
+
+bus.Run("localhost:9313")
+```
+
 
 ##### you can handle authentication or access to certain topics using to [Before Handlers](#before-handlers)
 
@@ -127,7 +168,7 @@ RemoveTopic(topic)
 
 ##### JS Client Example:
 
-```js
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>

@@ -39,7 +39,7 @@ func NewClient(addr string, secure bool,path ...string) (*Client,error) {
 		spath=path[0]
 	}
 	u := url.URL{Scheme: sch, Host: addr, Path: spath}
-	klog.Printf("connecting to %s\n", u.String())
+	
 	c, resp, err := ws.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		if err == ws.ErrBadHandshake {
@@ -69,6 +69,7 @@ func NewClient(addr string, secure bool,path ...string) (*Client,error) {
 		done: make(chan struct{}),
 	}
 	client.handle()
+	klog.Printfs("client connected to %s\n", u.String())
 	return client,nil
 }
 
@@ -78,23 +79,30 @@ func (client *Client) handle() {
 		v1,okTopic := data["topic"]
 		v2,okName := data["name"]
 
+		found := false
 		if okTopic && okName {
 			if fn,ok := mClientTopicHandlers.Get(v1.(string)+":"+v2.(string));ok {
+				found=true
 				fn(data,sub)
 			} 
 		} else if okTopic {
 			if vv,ok := v1.(string);ok {
 				if fn,ok := mClientTopicHandlers.Get(vv);ok {
+					found=true
 					fn(data,sub)
 				}
 			} 
 		} else if okName {
 			if vv,ok := v2.(string);ok {
 				if fn,ok := mClientTopicHandlers.Get(vv);ok {
+					found=true
 					fn(data,sub)
 				}
 			} 
 		}	 
+		if !found && DEBUG {
+			klog.Printfs("rdclient handler for topic %s not found \n",v1)
+		}
 	})
 }
 
@@ -181,18 +189,32 @@ func (client *Client) SendTo(name string, data map[string]any)  {
 	}
 	err :=client.conn.WriteJSON(data)
 	if err != nil {
-		fmt.Println("error SendTo, data:",data,", err:",err)
+		klog.Printfs("error SendTo, data: %v, err: %v\n",data,err)
 		return 
 	}
 }
 
-func (client *Client) sendDataToServer(addr string, data map[string]any)  {
+func (client *Client) sendDataToServer(data map[string]any)  {
 	data["id"]=client.id
 	err :=client.conn.WriteJSON(data)
 	if err != nil {
 		fmt.Println("error SendTo, data:",data,", err:",err)
 		return 
 	}
+}
+
+func (client *Client) Close() error {
+	err := client.conn.WriteMessage(ws.CloseMessage, ws.FormatCloseMessage(ws.CloseNormalClosure, ""))
+	if err != nil {
+		return err
+	}
+	err=client.conn.Close() 
+	if err != nil {
+		return err
+	}
+	client.conn=nil	
+	<-client.done
+	return nil
 }
 
 func (client *Client) Run() {
@@ -204,16 +226,7 @@ func (client *Client) Run() {
 			return
 		case <-interrupt:
 			log.Println("interrupt")
-			// Cleanly close the connection by sending a close message and then
-			// waiting (with timeout) for the server to close the connection.
-			err := client.conn.WriteMessage(ws.CloseMessage, ws.FormatCloseMessage(ws.CloseNormalClosure, ""))
-			if err != nil {
-				log.Println("write close:", err)
-				return
-			}			
-			_=client.conn.Close() 
-			client.conn=nil
-			<-client.done
+			client.Close()
 			return
 		}
 	}
@@ -242,7 +255,7 @@ func (client *Client) handleData(fn func(data map[string]any,sub *ClientSubscrip
 			message := map[string]any{}
 			if client.conn != nil {
 				err := client.conn.ReadJSON(&message)
-				if err == ws.ErrCloseSent || strings.Contains(err.Error(),"use of closed network connection") {
+				if err != nil && (err == ws.ErrCloseSent || strings.Contains(err.Error(),"use of closed network connection")) {
 					klog.Printfs("rdOnData error:%v\n", err)
 					return
 				} else if err != nil {
@@ -250,7 +263,7 @@ func (client *Client) handleData(fn func(data map[string]any,sub *ClientSubscrip
 					return
 				}
 				if DEBUG {
-					klog.Printf("client recv: %v\n",message)
+					klog.Printfs("client handleData recv: %v\n",message)
 				}
 				contin := BeforeDataWS(message,client.conn,nil)
 				if contin {
@@ -265,6 +278,9 @@ func (client *Client) handleData(fn func(data map[string]any,sub *ClientSubscrip
 					}
 					fn(message,&sub)
 				}
+			} else {
+				klog.Printfs("rdhandleData error: no connection\n")
+				return
 			}
 		}
 	}()

@@ -1,34 +1,41 @@
-# Kbus is your easiest way to share/synchronise data between your Golang servers or/and between you servers and browsers(JS client) and/or between your clients, any golang applications can communicate between each others and with html pages using the JS client(Pure JS no need for node or others) with zero configuration.
+### Kbus is a zero configuration Eventbus written in Golang, it offer an easy way to share/synchronise data between your Golang servers or between you servers and browsers(JS client) , or simply between your GO and JS clients. 
 
-# Kbus also handle distributed use cases or loadbalancing bus using a CombinedServer
+# What's New:
+- JoinCombinedServer, allow you to join a combined server, first you create a server, then you join the combined [See More](#server-bus-use-the-internal-bus-and-a-websocket-server)
+- SendToServer, allow to send data from serverBus to serverBus [See More](#server-bus-use-the-internal-bus-and-a-websocket-server)
+- Loadbalanced mode removed for the combinedServer, because it cannot work as i want it to work, Distributed mode will be the only way to synchronise your servers togethers
 
-#### let's say you have a discord like application for example, think how you can do a broadcast message in realtime to all room members notifying them that a new user joined the room, you can do it using pooling of course, but it's not very efficient, you can use also any broker but it will be hard to subscribe from the browser or html directly
+### Any Go App can communicate with another Go Server or another Go Client. 
 
-## how you can make it using kbus ?
+### JS client is written in Pure JS, so it can be used from any html page as a [CDN](https://raw.githubusercontent.com/kamalshkeir/kbus/master/JS/Bus.js)
+
+### Kbus also handle distributed use cases using a CombinedServer
+
+
+## You don't know where you can use it ?, here is a simple use case example:
+#### let's take a discord like application for example, if you goal is to broadcast message in realtime to all room members notifying them that a new user joined the room, you can do it using pooling of course, but it's not very efficient, you can use also any broker but it will be hard to subscribe from the browser or html directly
+
+## Kbus make it very easy, here is how:
 
 ###### Client side:
 
 ```html
+<script src="https://raw.githubusercontent.com/kamalshkeir/kbus/master/JS/Bus.js"></script>
 <script>
 let bus = new Bus("localhost:9313");
 bus.autorestart=true;
 this.restartevery=5;
 bus.OnOpen = (e) => {
     let sub = bus.Subscribe("room-client",(data,subs) => {
-        console.log("data:",data);
         // show notification
 		...
+		// you can use subs to unsubscribe
+		subs.Unsubscribe();
     });
+
+	// or you can unsubscribe from outside the handler using the returned sub
+	sub.Unsubscribe();
 }
-
-btn.addEventListener("click",(e) => {
-    e.preventDefault();
-    // send to only one connection , our go client in this case, so this is a communication between client js and client go
-    bus.SendTo("client:go",{
-        "msg":"hello go client from client js"
-    })
-})
-
 </script>
 ```
 ###### Server side:
@@ -52,7 +59,7 @@ bus.Run("localhost:9313")
 ## Get Started
 
 ```sh
-	go get github.com/kamalshkeir/kbus@v0.0.2
+go get github.com/kamalshkeir/kbus@v0.0.2
 ```
 
 
@@ -72,7 +79,8 @@ func (ch Channel) Unsubscribe() Channel
 ### Server Bus (use the internal bus and a websocket server)
 ```go
 func NewServer() *Server
-
+func (s *Server) JoinCombinedServer(combinedAddr string,secure bool) // not tested yet
+func (s *Server) SendToServer(addr string, data map[string]any, secure ...bool) // allow you to send data to another server, and listen for it using kbus.BeforeServersData
 func (s *Server) Subscribe(topic string, fn func(data map[string]any,ch Channel),name ...string) (ch Channel) 
 func (s *Server) Unsubscribe(topic string, ch Channel)
 func (s *Server) Publish(topic string, data map[string]any)
@@ -286,27 +294,33 @@ func main() {
 	server1Addr := kbus.AddressOption{
 		Address: "localhost:9313",
 		Secure: false,
-		LoadBalanced: true, // this server will publishOnly whatever it receive to :9300 combined server
 	}
 	server2Addr := kbus.AddressOption{
 		Address: "localhost:9314",
 		Secure: false,
-		Distributed: true, // this server will continue handling his own subscriptions on topics and share any action received with :9300 combined server
 	}
 	bus := kbus.NewCombinedServer("localhost:9300",false,server1Addr,server2Addr)
 	bus.Subscribe("server",func(data map[string]any, ch kbus.Channel) {
 		fmt.Println("master recv data= ",data)
 	})
+
+	// what will happen here is that topics will be available in all serverBus, let's say you are subscribed to a topic in server1, you can publish on server2 or combined, both will tell server1 to publish 
 	bus.Run()
 }
 ```
 
 ## Before Handlers 
 ```go
-kbus.BeforeUpgradeWS=func(r *http.Request) bool {
-	
+// before upgrade WS connection
+BeforeUpgradeWS=func(r *http.Request) bool {
+	return true
 }
-kbus.BeforeDataWS=func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool {
-	
+// before recv data on WS
+BeforeDataWS = func(data map[string]any,conn *ws.Conn, originalRequest *http.Request) bool {
+	return true
+}
+// Before Recv data from another server
+BeforeServersData = func(data any,conn *ws.Conn) {
+	return
 }
 ```

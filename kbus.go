@@ -51,7 +51,7 @@ func New() *Bus {
 	}
 }
 
-// Subscribe subscribe to a topic and return a unsubscriber channeln you can also unsubscribe from the handler, useful for SubscribeOnce or N times
+// Subscribe let you subscribe to a topic and return a unsubscriber channel
 func (b *Bus) Subscribe(topic string, fn func(data map[string]any, ch Channel),name ...string) (ch Channel) {
 	// add sub
 	nn := ""
@@ -85,7 +85,6 @@ func (b *Bus) Subscribe(topic string, fn func(data map[string]any, ch Channel),n
 	return ch
 }
 
-// Unsubscribe unsubscribe from a topic using channel
 func (b *Bus) Unsubscribe(topic string,ch Channel) {
 	// add sub
 	if subs, found := bus.subscribers.Get(topic); found {
@@ -100,8 +99,6 @@ func (b *Bus) Unsubscribe(topic string,ch Channel) {
 	mChannelName.Delete(ch)
 }
 
-
-// UnsubscribeId unsubscribe from a topic using channel id
 func (b *Bus) UnsubscribeId(topic,id string) {
 	// add sub
 	if subs, found := bus.subscribers.Get(topic); found {
@@ -120,8 +117,6 @@ func (b *Bus) UnsubscribeId(topic,id string) {
 	})
 }
 
-
-// Publish publish data to a topic
 func (b *Bus) Publish(topic string, data map[string]any) {
 	b.mu.Lock()
 	data["topic"]=topic
@@ -136,8 +131,6 @@ func (b *Bus) Publish(topic string, data map[string]any) {
 	}
 }
 
-
-// RemoveTopic remove a topic completely
 func (b *Bus) RemoveTopic(topic string) {
 	go b.subscribers.Delete(topic)
 	go b.wsSubscribers.Delete(topic)
@@ -151,7 +144,6 @@ func (b *Bus) RemoveTopic(topic string) {
 	})
 }
 
-// SendTo send to a named topic
 func (b *Bus) SendTo(name string, data map[string]any) {
 	data["name"]=name
 	mChannelName.Range(func(key Channel, value []string) {

@@ -59,7 +59,7 @@ bus.Run("localhost:9313")
 ## Get Started
 
 ```sh
-go get github.com/kamalshkeir/kbus@v0.0.2
+go get github.com/kamalshkeir/kbus@v0.1.0
 ```
 
 

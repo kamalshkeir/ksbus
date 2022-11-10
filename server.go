@@ -118,7 +118,7 @@ func (s *Server) SendToServer(addr string, data map[string]any, secure ...bool) 
 	}
 	data=map[string]any{
 		"action":"server_message",
-		"addr":LocalAddress,
+		"addr":addr,
 		"data":data,
 	}
 	if err := conn.WriteJSON(data);err != nil {

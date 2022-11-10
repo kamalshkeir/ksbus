@@ -1,4 +1,4 @@
-package kbus
+package ksbus
 
 import (
 	"net/url"

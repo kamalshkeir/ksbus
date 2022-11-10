@@ -1,4 +1,4 @@
-module github.com/kamalshkeir/kbus
+module github.com/kamalshkeir/ksbus
 
 go 1.19
 

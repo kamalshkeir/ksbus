@@ -1,4 +1,4 @@
-### Kbus is a zero configuration Eventbus written in Golang, it offer an easy way to share/synchronise data between your Golang servers or between you servers and browsers(JS client) , or simply between your GO and JS clients. 
+### KSbus is a zero configuration Eventbus written in Golang, it offer an easy way to share/synchronise data between your Golang servers or between you servers and browsers(JS client) , or simply between your GO and JS clients. 
 
 # What's New:
 - JoinCombinedServer, allow you to join a combined server, first you create a server, then you join the combined [See More](#server-bus-use-the-internal-bus-and-a-websocket-server)
@@ -7,20 +7,20 @@
 
 ### Any Go App can communicate with another Go Server or another Go Client. 
 
-### JS client is written in Pure JS, so it can be used from any html page as a [CDN](https://raw.githubusercontent.com/kamalshkeir/kbus/master/JS/Bus.js)
+### JS client is written in Pure JS, so it can be used from any html page as a [CDN](https://raw.githubusercontent.com/kamalshkeir/ksbus/master/JS/Bus.js)
 
-### Kbus also handle distributed use cases using a CombinedServer
+### KSbus also handle distributed use cases using a CombinedServer
 
 
 ## You don't know where you can use it ?, here is a simple use case example:
 #### let's take a discord like application for example, if you goal is to broadcast message in realtime to all room members notifying them that a new user joined the room, you can do it using pooling of course, but it's not very efficient, you can use also any broker but it will be hard to subscribe from the browser or html directly
 
-## Kbus make it very easy, here is how:
+## KSbus make it very easy, here is how:
 
 ###### Client side:
 
 ```html
-<script src="https://raw.githubusercontent.com/kamalshkeir/kbus/master/JS/Bus.js"></script>
+<script src="https://raw.githubusercontent.com/kamalshkeir/ksbus/master/JS/Bus.js"></script>
 <script>
 let bus = new Bus("localhost:9313");
 bus.autorestart=true;
@@ -40,7 +40,7 @@ bus.OnOpen = (e) => {
 ```
 ###### Server side:
 ```go
-bus := kbus.NewServer()
+bus := ksbus.NewServer()
 
 // whenever you register a new user to the room
 bus.Publish("room-client",map[string]any{
@@ -59,7 +59,7 @@ bus.Run("localhost:9313")
 ## Get Started
 
 ```sh
-go get github.com/kamalshkeir/kbus@v0.1.0
+go get github.com/kamalshkeir/ksbus@latest
 ```
 
 
@@ -80,7 +80,7 @@ func (ch Channel) Unsubscribe() Channel
 ```go
 func NewServer() *Server
 func (s *Server) JoinCombinedServer(combinedAddr string,secure bool) // not tested yet
-func (s *Server) SendToServer(addr string, data map[string]any, secure ...bool) // allow you to send data to another server, and listen for it using kbus.BeforeServersData
+func (s *Server) SendToServer(addr string, data map[string]any, secure ...bool) // allow you to send data to another server, and listen for it using ksbus.BeforeServersData
 func (s *Server) Subscribe(topic string, fn func(data map[string]any,ch Channel),name ...string) (ch Channel) 
 func (s *Server) Unsubscribe(topic string, ch Channel)
 func (s *Server) Publish(topic string, data map[string]any)
@@ -98,7 +98,7 @@ func (ch Channel) Unsubscribe() Channel
 ##### Example:
 ```go
 func main() {
-	bus := kbus.NewServer()
+	bus := ksbus.NewServer()
 	bus.App.LocalTemplates("tempss") // load template folder to be used with c.HTML
 	bus.App.LocalStatics("assets","/assets/")
 	
@@ -107,7 +107,7 @@ func main() {
 	})
 
     // if you specify a name 'go' to this subscription like below, you will receive data from any Publish on topic 'server' AND SendTo on 'server:go' name, so SendTo allow you to send not for all listeners on the topic, but the unique named one 'topic1:go'
-	bus.Subscribe("server",func(data map[string]any, ch kbus.Channel) {
+	bus.Subscribe("server",func(data map[string]any, ch ksbus.Channel) {
 		log.Println("server recv:",data)
 	},"go")
 
@@ -142,15 +142,15 @@ func (subscribtion *ClientSubscription) Unsubscribe() (*ClientSubscription)
 ##### Example
 ```go
 func main() {
-	client,_ := kbus.NewClient("localhost:9313",false)
+	client,_ := ksbus.NewClient("localhost:9313",false)
 
     // if you specify a name 'go' to this subscription like below, you will receive data from any Publish on topic 'topic1' AND any SendTo on 'topic1:go' name, so SendTo allow you to send not for all listeners on the topic, but the unique named one 'topic1:go'
-	client.Subscribe("topic1",func(data map[string]any, unsub *kbus.ClientSubscription) {
+	client.Subscribe("topic1",func(data map[string]any, unsub *ksbus.ClientSubscription) {
 		fmt.Println("client recv",data)
 	},"go")
 
     // this will only receive on Publish on topic 'topic2', because no name specified , so you can't send only for this one using SendTo
-    client.Subscribe("topic2",func(data map[string]any, unsub *kbus.ClientSubscription) {
+    client.Subscribe("topic2",func(data map[string]any, unsub *ksbus.ClientSubscription) {
 		fmt.Println("client recv",data)
 	})
 
@@ -239,8 +239,8 @@ func (s *CombinedServer) handleWS(addr string)
 
 ```go
 func main() {
-	bus := kbus.NewServer()
-	kbus.DEBUG=true
+	bus := ksbus.NewServer()
+	ksbus.DEBUG=true
 	bus.App.LocalTemplates("../../tempss")
 	bus.App.LocalStatics("../../assets","/assets/")
 	addr := "localhost:9313"
@@ -250,7 +250,7 @@ func main() {
 		})
 	})
 
-	bus.Subscribe("server",func(data map[string]any, ch kbus.Channel) {
+	bus.Subscribe("server",func(data map[string]any, ch ksbus.Channel) {
 		fmt.Println(addr,"recv from",ch.Id,", data= ",data,)
 	})
 
@@ -265,8 +265,8 @@ func main() {
 
 ```go
 func main() {
-	bus := kbus.NewServer()
-	kbus.DEBUG=true
+	bus := ksbus.NewServer()
+	ksbus.DEBUG=true
 	bus.App.LocalTemplates("../../tempss")
 	bus.App.LocalStatics("../../assets","/assets/")
 	addr := "localhost:9314"
@@ -276,7 +276,7 @@ func main() {
 		})
 	})
 
-	bus.Subscribe("server",func(data map[string]any, ch kbus.Channel) {
+	bus.Subscribe("server",func(data map[string]any, ch ksbus.Channel) {
 		fmt.Println(addr,"recv from",ch.Id,", data= ",data,)
 	})
 
@@ -291,16 +291,16 @@ func main() {
 
 ```go
 func main() {
-	server1Addr := kbus.AddressOption{
+	server1Addr := ksbus.AddressOption{
 		Address: "localhost:9313",
 		Secure: false,
 	}
-	server2Addr := kbus.AddressOption{
+	server2Addr := ksbus.AddressOption{
 		Address: "localhost:9314",
 		Secure: false,
 	}
-	bus := kbus.NewCombinedServer("localhost:9300",false,server1Addr,server2Addr)
-	bus.Subscribe("server",func(data map[string]any, ch kbus.Channel) {
+	bus := ksbus.NewCombinedServer("localhost:9300",false,server1Addr,server2Addr)
+	bus.Subscribe("server",func(data map[string]any, ch ksbus.Channel) {
 		fmt.Println("master recv data= ",data)
 	})
 

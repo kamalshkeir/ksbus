@@ -1,4 +1,4 @@
-// Package Kbus is a minimalistic event bus demonstration on how useful is to design event based systems using Golang, allowing you to synchronise your backends and frontends
+// Package KSbus is a minimalistic event bus demonstration on how useful is to design event based systems using Golang, allowing you to synchronise your backends and frontends
 //
 // # What is included in this package ?
 //  1. Internal Bus [New]
@@ -10,11 +10,11 @@
 //
 // This package use [Kmux] wich is the same router as [Kago]
 //
-// # Kbus can be used between your go servers, and between your servers and client using the built in JS library
+// # KSbus can be used between your go servers, and between your servers and client using the built in JS library
 //
 // [Kago]: https://github.com/kamalshkeir/kago
 // [Kmux]: https://github.com/kamalshkeir/kmux
-package kbus
+package ksbus
 
 import (
 	"sync"

@@ -1,4 +1,4 @@
-package kbus
+package ksbus
 
 type Channel struct {
 	Id    string

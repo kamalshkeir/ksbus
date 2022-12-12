@@ -58,15 +58,17 @@ func (s *Server) addWS(id,topic string, conn *ws.Conn) {
 }
 
 func (s *Server) removeWS(wsConn *ws.Conn) {
-	go mWSName.Range(func(key ClientSubscription, value []string) {
+	mWSName.Range(func(key ClientSubscription, value []string) {
 		if key.Conn == wsConn {			
 			mWSName.Delete(key)
 		}
 	})
 
-	go s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
+	s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
 		for i,sub := range value {
 			if sub.Conn == wsConn {
+				s.mu.Lock()
+				defer s.mu.Unlock()
 				value = append(value[:i], value[i+1:]...)
 				s.Bus.wsSubscribers.Set(key, value)
 				if len(value) == 0 {
@@ -85,7 +87,7 @@ func (s *Server) removeWS(wsConn *ws.Conn) {
 		}
 	})		
 
-	go mServersConnectionsSendToServer.Range(func(key string, value *ws.Conn) {	
+	mServersConnectionsSendToServer.Range(func(key string, value *ws.Conn) {	
 		if value == wsConn {
 			mServersConnectionsSendToServer.Delete(key)
 		}
@@ -140,7 +142,7 @@ func (server *Server) handleWS(addr string) {
 				if err != nil && DEBUG {
 					klog.Printf("rd%v\n",err)
 				}
-				//server.removeWS(c.Ws)
+				go server.removeWS(c.Ws)
 				break
 			}
 		

@@ -19,7 +19,6 @@ func (s *Server) publishWS(topic string, data map[string]any) {
 	defer s.Bus.mu.Unlock()		
 	data["topic"]=topic
 	if subscriptions, ok := s.Bus.wsSubscribers.Get(topic); ok {
-		fmt.Println("subscribers:",subscriptions)
 		for _, sub := range subscriptions {
 			_ = sub.Conn.WriteJSON(data)
 		}
@@ -58,38 +57,40 @@ func (s *Server) addWS(id,topic string, conn *ws.Conn) {
 }
 
 func (s *Server) removeWS(wsConn *ws.Conn) {
-	mWSName.Range(func(key ClientSubscription, value []string) {
-		if key.Conn == wsConn {			
-			mWSName.Delete(key)
-		}
-	})
-
-	go s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
-		for i,sub := range value {
-			if sub.Conn == wsConn {
-				value = append(value[:i], value[i+1:]...)
-				go s.Bus.wsSubscribers.Set(key, value)
-				if len(value) == 0 {
-					mLocalTopics.Delete(key)
-					if keepServing {
-						mSubscribedServers.Range(func(addr string, value *Client) {
-							s.sendData(addr,map[string]any{
-								"action":"remove_node_topic",
-								"addr":LocalAddress,
-								"topic_to_delete":key,
-							})
-						})	
+	go func() {
+		mWSName.Range(func(key ClientSubscription, value []string) {
+			if key.Conn == wsConn {			
+				mWSName.Delete(key)
+			}
+		})
+	
+		s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
+			for i,sub := range value {
+				if sub.Conn == wsConn {
+					value = append(value[:i], value[i+1:]...)
+					go s.Bus.wsSubscribers.Set(key, value)
+					if len(value) == 0 {
+						mLocalTopics.Delete(key)
+						if keepServing {
+							mSubscribedServers.Range(func(addr string, value *Client) {
+								s.sendData(addr,map[string]any{
+									"action":"remove_node_topic",
+									"addr":LocalAddress,
+									"topic_to_delete":key,
+								})
+							})	
+						}
 					}
 				}
 			}
-		}
-	})		
-
-	mServersConnectionsSendToServer.Range(func(key string, value *ws.Conn) {	
-		if value == wsConn {
-			mServersConnectionsSendToServer.Delete(key)
-		}
-	})
+		})		
+	
+		mServersConnectionsSendToServer.Range(func(key string, value *ws.Conn) {	
+			if value == wsConn {
+				mServersConnectionsSendToServer.Delete(key)
+			}
+		})
+	}()
 }
 
 func (s *Server) unsubscribeWS(id,topic string, wsConn *ws.Conn) {
@@ -140,7 +141,7 @@ func (server *Server) handleWS(addr string) {
 				if err != nil && DEBUG {
 					klog.Printf("rd%v\n",err)
 				}
-				go server.removeWS(c.Ws)
+				server.removeWS(c.Ws)
 				break
 			}
 		

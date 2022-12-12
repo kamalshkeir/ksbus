@@ -60,15 +60,13 @@ func (s *Server) addWS(id,topic string, conn *ws.Conn) {
 }
 
 func (s *Server) removeWS(wsConn *ws.Conn) {
-	s.Bus.mu.Lock()
-	defer s.Bus.mu.Unlock()	
-	mWSName.Range(func(key ClientSubscription, value []string) {
+	go mWSName.Range(func(key ClientSubscription, value []string) {
 		if key.Conn == wsConn {			
 			mWSName.Delete(key)
 		}
 	})
 
-	s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
+	go s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
 		for i,sub := range value {
 			if sub.Conn == wsConn {
 				value = append(value[:i], value[i+1:]...)
@@ -89,7 +87,7 @@ func (s *Server) removeWS(wsConn *ws.Conn) {
 		}
 	})		
 
-	mServersConnectionsSendToServer.Range(func(key string, value *ws.Conn) {	
+	go mServersConnectionsSendToServer.Range(func(key string, value *ws.Conn) {	
 		if value == wsConn {
 			mServersConnectionsSendToServer.Delete(key)
 		}
@@ -97,7 +95,7 @@ func (s *Server) removeWS(wsConn *ws.Conn) {
 }
 
 func (s *Server) unsubscribeWS(id,topic string, wsConn *ws.Conn) {
-	s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
+	go s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
 		for i, sub := range value {
 			if sub.Conn == wsConn {
 				value = append(value[:i], value[i+1:]...)
@@ -105,7 +103,7 @@ func (s *Server) unsubscribeWS(id,topic string, wsConn *ws.Conn) {
 			}
 		}
 	})
-	mWSName.Range(func(key ClientSubscription, value []string) {
+	go mWSName.Range(func(key ClientSubscription, value []string) {
 		if key.Conn == wsConn {
 			mWSName.Delete(key)
 		}

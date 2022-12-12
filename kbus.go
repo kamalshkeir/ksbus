@@ -76,10 +76,10 @@ func (b *Bus) Subscribe(topic string, fn func(data map[string]any, ch Channel),n
 	}
 
 	go func() {
-		b.mu.Lock()
-		defer b.mu.Unlock()
 		for v := range ch.Ch {
-			go fn(v,ch)	
+			b.mu.Lock()
+			fn(v,ch)
+			b.mu.Unlock()
 		}
 	}()
 	return ch

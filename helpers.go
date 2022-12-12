@@ -19,7 +19,7 @@ func (s *Server) publishWS(topic string, data map[string]any) {
 	defer s.Bus.mu.Unlock()	
 	data["topic"]=topic
 	if subscriptions, ok := s.Bus.wsSubscribers.Get(topic); ok {
-		fmt.Println("publishWS subscribers:",subscriptions)
+		fmt.Println("subscribers:",subscriptions)
 		for _, sub := range subscriptions {
 			_ = sub.Conn.WriteJSON(data)
 		}
@@ -27,8 +27,6 @@ func (s *Server) publishWS(topic string, data map[string]any) {
 }
 
 func (s *Server) addWS(id,topic string, conn *ws.Conn) {
-	s.Bus.mu.Lock()
-	defer s.Bus.mu.Unlock()	
 	wsSubscribers := s.Bus.wsSubscribers
 	new := ClientSubscription{
 		Id: GenerateRandomString(5),

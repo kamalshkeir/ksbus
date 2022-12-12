@@ -56,7 +56,7 @@ func (s *Server) Unsubscribe(topic string, ch Channel) {
 
 func (s *Server) Publish(topic string, data map[string]any) {
 	bus.Publish(topic, data)	
-	s.publishWS(topic, data)
+	go s.publishWS(topic, data)
 }
 
 func (s *Server) RemoveTopic(topic string) {

@@ -67,10 +67,8 @@ func (s *Server) removeWS(wsConn *ws.Conn) {
 	go s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
 		for i,sub := range value {
 			if sub.Conn == wsConn {
-				s.mu.Lock()
-				defer s.mu.Unlock()
 				value = append(value[:i], value[i+1:]...)
-				s.Bus.wsSubscribers.Set(key, value)
+				go s.Bus.wsSubscribers.Set(key, value)
 				if len(value) == 0 {
 					mLocalTopics.Delete(key)
 					if keepServing {

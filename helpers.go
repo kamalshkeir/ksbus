@@ -140,7 +140,7 @@ func (server *Server) handleWS(addr string) {
 				if err != nil && DEBUG {
 					klog.Printf("rd%v\n",err)
 				}
-				server.removeWS(c.Ws)
+				go server.removeWS(c.Ws)
 				break
 			}
 		

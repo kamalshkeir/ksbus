@@ -118,9 +118,7 @@ func (b *Bus) UnsubscribeId(topic,id string) {
 }
 
 func (b *Bus) Publish(topic string, data map[string]any) {
-	b.mu.Lock()
 	data["topic"]=topic
-	b.mu.Unlock()
 	if chans, found := b.subscribers.Get(topic); found {
 		channels := append([]Channel{}, chans...)
 		go func(data map[string]any, subs []Channel) {

@@ -64,7 +64,7 @@ func (s *Server) removeWS(wsConn *ws.Conn) {
 		}
 	})
 
-	s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
+	go s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
 		for i,sub := range value {
 			if sub.Conn == wsConn {
 				s.mu.Lock()

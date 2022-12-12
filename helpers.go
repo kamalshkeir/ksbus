@@ -58,6 +58,8 @@ func (s *Server) addWS(id,topic string, conn *ws.Conn) {
 }
 
 func (s *Server) removeWS(wsConn *ws.Conn) {
+	s.Bus.mu.Lock()
+	defer s.Bus.mu.Unlock()	
 	go mWSName.Range(func(key ClientSubscription, value []string) {
 		if key.Conn == wsConn {			
 			mWSName.Delete(key)

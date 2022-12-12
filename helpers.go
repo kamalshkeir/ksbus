@@ -15,10 +15,11 @@ var (
 
 
 func (s *Server) publishWS(topic string, data map[string]any) {
-	data["topic"]=topic
 	s.Bus.mu.Lock()
 	defer s.Bus.mu.Unlock()		
+	data["topic"]=topic
 	if subscriptions, ok := s.Bus.wsSubscribers.Get(topic); ok {
+		fmt.Println("subscribers:",subscriptions)
 		for _, sub := range subscriptions {
 			_ = sub.Conn.WriteJSON(data)
 		}
@@ -63,7 +64,7 @@ func (s *Server) removeWS(wsConn *ws.Conn) {
 		}
 	})
 
-	s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
+	go s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
 		for i,sub := range value {
 			if sub.Conn == wsConn {
 				value = append(value[:i], value[i+1:]...)

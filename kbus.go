@@ -26,14 +26,14 @@ var bus *Bus
 
 func init() {
 	bus = &Bus{
-		subscribers: kmap.New[string, []Channel](false),
+		subscribers:   kmap.New[string, []Channel](false),
 		wsSubscribers: kmap.New[string, []ClientSubscription](false),
 	}
 }
 
 // Bus type handle all subscriptions, websockets and channels
 type Bus struct {
-	subscribers  *kmap.SafeMap[string,[]Channel]
+	subscribers   *kmap.SafeMap[string, []Channel]
 	wsSubscribers *kmap.SafeMap[string, []ClientSubscription]
 	mu            sync.Mutex
 }
@@ -44,7 +44,7 @@ func New() *Bus {
 		return bus
 	} else {
 		bus = &Bus{
-			subscribers: kmap.New[string, []Channel](false),
+			subscribers:   kmap.New[string, []Channel](false),
 			wsSubscribers: kmap.New[string, []ClientSubscription](false),
 		}
 		return bus
@@ -52,64 +52,64 @@ func New() *Bus {
 }
 
 // Subscribe let you subscribe to a topic and return a unsubscriber channel
-func (b *Bus) Subscribe(topic string, fn func(data map[string]any, ch Channel),name ...string) (ch Channel) {
+func (b *Bus) Subscribe(topic string, fn func(data map[string]any, ch Channel), name ...string) (ch Channel) {
 	// add sub
 	nn := ""
-	if len(name)>0 && name[0] != "" {
-		nn=name[0]
+	if len(name) > 0 && name[0] != "" {
+		nn = name[0]
 	}
 	ch = Channel{
-		Id: GenerateRandomString(5),
-		Ch: make(chan map[string]any),
+		Id:    GenerateRandomString(5),
+		Ch:    make(chan map[string]any),
 		Topic: topic,
-		Name: nn,
+		Name:  nn,
 	}
 	if nn != "" {
-		setName(ch,nn)
+		setName(ch, nn)
 	}
 	if subs, found := b.subscribers.Get(topic); found {
 		subs = append(subs, ch)
-		b.subscribers.Set(topic,subs)
+		b.subscribers.Set(topic, subs)
 	} else {
 		subs = append([]Channel{}, ch)
-		b.subscribers.Set(topic,subs)
+		b.subscribers.Set(topic, subs)
 	}
 
 	go func() {
 		for v := range ch.Ch {
 			b.mu.Lock()
-			fn(v,ch)
+			fn(v, ch)
 			b.mu.Unlock()
 		}
 	}()
 	return ch
 }
 
-func (b *Bus) Unsubscribe(topic string,ch Channel) {
+func (b *Bus) Unsubscribe(topic string, ch Channel) {
 	// add sub
 	if subs, found := bus.subscribers.Get(topic); found {
-		for i,sub := range subs {
+		for i, sub := range subs {
 			if sub == ch {
-				subs = append(subs[:i],subs[i+1:]... )
-				bus.subscribers.Set(topic,subs)
+				subs = append(subs[:i], subs[i+1:]...)
+				bus.subscribers.Set(topic, subs)
 				close(ch.Ch)
 			}
 		}
-	} 
+	}
 	mChannelName.Delete(ch)
 }
 
-func (b *Bus) UnsubscribeId(topic,id string) {
+func (b *Bus) UnsubscribeId(topic, id string) {
 	// add sub
 	if subs, found := bus.subscribers.Get(topic); found {
-		for i,sub := range subs {
+		for i, sub := range subs {
 			if sub.Id == id {
-				subs = append(subs[:i],subs[i+1:]... )
-				bus.subscribers.Set(topic,subs)
+				subs = append(subs[:i], subs[i+1:]...)
+				bus.subscribers.Set(topic, subs)
 				close(sub.Ch)
 			}
 		}
-	} 
+	}
 	mChannelName.Range(func(key Channel, value []string) {
 		if key.Id == id {
 			mChannelName.Delete(key)
@@ -118,7 +118,7 @@ func (b *Bus) UnsubscribeId(topic,id string) {
 }
 
 func (b *Bus) Publish(topic string, data map[string]any) {
-	data["topic"]=topic
+	data["topic"] = topic
 	if chans, found := b.subscribers.Get(topic); found {
 		channels := append([]Channel{}, chans...)
 		go func(data map[string]any, subs []Channel) {
@@ -133,19 +133,19 @@ func (b *Bus) RemoveTopic(topic string) {
 	go b.subscribers.Delete(topic)
 	go b.wsSubscribers.Delete(topic)
 	mWSName.Range(func(key ClientSubscription, topicss []string) {
-		for i,v := range topicss {
+		for i, v := range topicss {
 			if v == topic {
-				topicss=append(topicss[:i],topicss[i+1:]... )
-				mWSName.Set(key,topicss)
+				topicss = append(topicss[:i], topicss[i+1:]...)
+				mWSName.Set(key, topicss)
 			}
 		}
 	})
 }
 
 func (b *Bus) SendTo(name string, data map[string]any) {
-	data["name"]=name
+	data["name"] = name
 	mChannelName.Range(func(key Channel, value []string) {
-		for _,v := range value {
+		for _, v := range value {
 			if v == name {
 				key.Ch <- data
 			}

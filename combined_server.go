@@ -8,31 +8,28 @@ import (
 	"github.com/kamalshkeir/kmux/ws"
 )
 
-
-
 type CombinedServer struct {
-	addr          string
-	server        *Server
+	addr   string
+	server *Server
 }
 
 type AddressOption struct {
-	Address      string
-	Secure       bool
-	Path         string
+	Address string
+	Secure  bool
+	Path    string
 }
 
-
-func NewCombinedServer(newAddress string,secure bool, serversAddrs ...AddressOption) *CombinedServer {
+func NewCombinedServer(newAddress string, secure bool, serversAddrs ...AddressOption) *CombinedServer {
 	server := NewServer()
 	c := CombinedServer{
-		addr:          newAddress,
-		server:        server,
+		addr:   newAddress,
+		server: server,
 	}
 	LocalAddress = newAddress
 	for _, srvAddr := range serversAddrs {
 		c.subscribeToServer(srvAddr)
 	}
-	
+
 	return &c
 }
 
@@ -40,14 +37,14 @@ func (c *CombinedServer) subscribeToServer(addr AddressOption) {
 	if DEBUG {
 		klog.Printfs("grSubscribing To Server %v\n", addr)
 	}
-	conn := c.server.sendData(addr.Address,map[string]any{
+	conn := c.server.sendData(addr.Address, map[string]any{
 		"action": "server_sub",
 		"addr":   LocalAddress,
-		"secure":addr.Secure,
-	},addr.Secure)
-	mSubscribedServers.Set(addr.Address,&Client{
-		conn: conn,
-		id: GenerateRandomString(7),
+		"secure": addr.Secure,
+	}, addr.Secure)
+	mSubscribedServers.Set(addr.Address, &Client{
+		conn:       conn,
+		id:         GenerateRandomString(7),
 		serverAddr: addr.Address,
 	})
 }
@@ -105,29 +102,28 @@ func (s *CombinedServer) handleWS(addr string) {
 				klog.Printfs("yl%v\n", m)
 			}
 
-			
-			go s.handleActions(m,c)	
+			go s.handleActions(m, c)
 		}
 	})
 }
 
-func (s *CombinedServer) handleActions(m map[string]any,c *kmux.WsContext) {
+func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 	publisher := ""
-	if publisherAddr,ok := m["from_publisher"];ok {
-		if pubAddr,ok := publisherAddr.(string);ok {
-			publisher=pubAddr
+	if publisherAddr, ok := m["from_publisher"]; ok {
+		if pubAddr, ok := publisherAddr.(string); ok {
+			publisher = pubAddr
 		}
 	}
 	if publisher != "master" && publisher != LocalAddress && publisher != "localhost"+LocalAddress {
 		mServersTopics.Range(func(addr string, tpcs map[string]bool) {
 			if publisher != addr {
-				m["from_publisher"]="master"
-				fmt.Println("Combined sending data to ",addr,m)
-				s.server.sendData(addr,m)
+				m["from_publisher"] = "master"
+				fmt.Println("Combined sending data to ", addr, m)
+				s.server.sendData(addr, m)
 			}
 		})
 	}
-	
+
 	if action, ok := m["action"]; ok {
 		switch action {
 		case "pub", "publish":
@@ -215,13 +211,13 @@ func (s *CombinedServer) handleActions(m map[string]any,c *kmux.WsContext) {
 				})
 			}
 		case "remove_topic", "removeTopic":
-			if topic, ok := m["topic"]; ok && publisher == ""{
+			if topic, ok := m["topic"]; ok && publisher == "" {
 				s.server.RemoveTopic(topic.(string))
 			} else if publisher != "" {
 				mServersTopics.Range(func(addr string, value map[string]bool) {
 					if addr == publisher {
-						value[m["topic"].(string)]=true
-						mServersTopics.Set(addr,value)
+						value[m["topic"].(string)] = true
+						mServersTopics.Set(addr, value)
 					}
 				})
 			} else {
@@ -328,7 +324,7 @@ func (s *CombinedServer) handleActions(m map[string]any,c *kmux.WsContext) {
 			if v, ok := m["topics"]; ok {
 				topicsRes = map[string]bool{}
 				for _, tpIN := range v.([]any) {
-					topicsRes[tpIN.(string)]=true
+					topicsRes[tpIN.(string)] = true
 				}
 			}
 			mServersTopics.Set(m["addr"].(string), topicsRes)
@@ -338,26 +334,26 @@ func (s *CombinedServer) handleActions(m map[string]any,c *kmux.WsContext) {
 			tp := m["topic_to_delete"]
 			mServersTopics.Range(func(addr string, topics map[string]bool) {
 				if addr == addrr.(string) {
-					delete(topics,tp.(string))
-					mServersTopics.Set(addr,topics)
+					delete(topics, tp.(string))
+					mServersTopics.Set(addr, topics)
 				}
 			})
-		case "new_node":				
+		case "new_node":
 			secur := false
-			if vAny,ok := m["secure"];ok {
+			if vAny, ok := m["secure"]; ok {
 				if vAny.(bool) {
-					secur=true
+					secur = true
 				}
 			}
-			client,err := NewClient(m["addr"].(string),secur)
+			client, err := NewClient(m["addr"].(string), secur)
 			if !klog.CheckError(err) {
-				mServersTopics.Set(m["addr"].(string),map[string]bool{})
-				mSubscribedServers.Set(m["addr"].(string),client)
+				mServersTopics.Set(m["addr"].(string), map[string]bool{})
+				mSubscribedServers.Set(m["addr"].(string), client)
 			}
-		case "server_message","serverMessage":
-			if data,ok := m["data"];ok {
-				if addr,ok := m["addr"];ok && addr.(string) == LocalAddress {
-					BeforeServersData(data,c.Ws)
+		case "server_message", "serverMessage":
+			if data, ok := m["data"]; ok {
+				if addr, ok := m["addr"]; ok && addr.(string) == LocalAddress {
+					BeforeServersData(data, c.Ws)
 				}
 			}
 		case "ping":

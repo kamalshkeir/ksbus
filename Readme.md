@@ -12,6 +12,12 @@
 ### KSbus also handle distributed use cases using a CombinedServer
 
 
+## Get Started
+
+```sh
+go get github.com/kamalshkeir/ksbus@v0.8.0
+```
+
 ## You don't know where you can use it ?, here is a simple use case example:
 #### let's take a discord like application for example, if you goal is to broadcast message in realtime to all room members notifying them that a new user joined the room, you can do it using pooling of course, but it's not very efficient, you can use also any broker but it will be hard to subscribe from the browser or html directly
 
@@ -20,7 +26,7 @@
 ###### Client side:
 
 ```html
-<script src="https://raw.githubusercontent.com/kamalshkeir/ksbus/master/JS/Bus.js"></script>
+<script src="path/to/Bus.js"></script>
 <script>
 let bus = new Bus("localhost:9313");
 bus.autorestart=true;
@@ -52,15 +58,6 @@ bus.Run("localhost:9313")
 
 
 ##### you can handle authentication or access to certain topics using to [Before Handlers](#before-handlers)
-
-##### Python client will be added soon 
-
-
-## Get Started
-
-```sh
-go get github.com/kamalshkeir/ksbus@latest
-```
 
 
 ### Internal Bus (No websockets, use channels to handle topic communications)

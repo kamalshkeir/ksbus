@@ -6,7 +6,6 @@
 //  3. Golang Combined Servers Bus [NewCombinedServer]
 //  4. JS Client Bus
 //  5. Golang Client Bus
-//  6. Coming soon (Python Client)
 //
 // This package use [Kmux] wich is the same router as [Kago]
 //

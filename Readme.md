@@ -1,13 +1,12 @@
 ### KSbus is a zero configuration Eventbus written in Golang, it offer an easy way to share/synchronise data between your Golang servers or between you servers and browsers(JS client) , or simply between your GO and JS clients. 
-
+It use [Kmux](https://github.com/kamalshkeir/kmux)
 # What's New:
 - JoinCombinedServer, allow you to join a combined server, first you create a server, then you join the combined [See More](#server-bus-use-the-internal-bus-and-a-websocket-server)
 - SendToServer, allow to send data from serverBus to serverBus [See More](#server-bus-use-the-internal-bus-and-a-websocket-server)
-- Loadbalanced mode removed for the combinedServer, because it cannot work as i want it to work, Distributed mode will be the only way to synchronise your servers togethers
 
 ### Any Go App can communicate with another Go Server or another Go Client. 
 
-### JS client is written in Pure JS, so it can be used from any html page as a [CDN](https://raw.githubusercontent.com/kamalshkeir/ksbus/master/JS/Bus.js)
+### JS client is written in Pure JS, you can server it using kmux, and link it in your html page
 
 ### KSbus also handle distributed use cases using a CombinedServer
 
@@ -15,7 +14,7 @@
 ## Get Started
 
 ```sh
-go get github.com/kamalshkeir/ksbus@v0.8.0
+go get github.com/kamalshkeir/ksbus@v0.8.5
 ```
 
 ## You don't know where you can use it ?, here is a simple use case example:

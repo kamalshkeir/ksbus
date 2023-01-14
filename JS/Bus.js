@@ -20,7 +20,7 @@ class Bus {
         $this.conn = new WebSocket(path);
         $this.conn.binaryType = 'arraybuffer';
         $this.conn.onopen = (e) => {
-            console.log("connected");
+            console.log("connected to "+path);
             $this.conn.send(JSON.stringify({
                 "action":"ping",
                 "id":$this.id
@@ -34,37 +34,29 @@ class Bus {
             $this.subscription={};
             if (obj.topic !== undefined) {
                 if($this.TopicHandlers[obj.topic] !== undefined) {
-                    if (obj.action === "sub" || obj.action === "subscribe") {
-                        let subs;
-                        if (obj.name !== undefined) {
-                            subs = new busSubscription($this,obj.topic,obj.name);
-                        } else {
-                            subs = new busSubscription($this,obj.topic);
-                        }
-                        $this.TopicHandlers[obj.topic](obj,subs);
+                    let subs;
+                    if (obj.name !== undefined) {
+                        subs = new busSubscription($this,obj.topic,obj.name);
                     } else {
-                        $this.TopicHandlers[obj.topic](obj);
-                    }           
+                        subs = new busSubscription($this,obj.topic);
+                    }
+                    $this.TopicHandlers[obj.topic](obj,subs);          
                     return;
                 } else {
                     $this.OnData(obj);
-                    console.log("topicHandler not found");
+                    console.log("topicHandler not found for:",obj.topic);
                 }
             } else if (obj.name !== undefined) {
                 if($this.TopicHandlers[obj.name] !== undefined) {
-                    if (obj.action === "sub" || obj.action === "subscribe") {
-                        let subs;
-                        if (obj.topic !== undefined) {
-                            subs = new busSubscription($this,obj.topic,obj.name);
-                        } 
-                        $this.TopicHandlers[obj.name](obj,subs);
-                    } else {
-                        $this.TopicHandlers[obj.name](obj);
-                    }                
+                    let subs;
+                    if (obj.topic !== undefined) {
+                        subs = new busSubscription($this,obj.topic,obj.name);
+                    }  
+                    $this.TopicHandlers[obj.name](obj,subs)               
                     return;
                 } else {
                     $this.OnData(obj);
-                    console.log("topicHandler not found");
+                    console.log("topicHandler not found for:",obj.topic);
                 }
             }
         };
@@ -95,9 +87,10 @@ class Bus {
                 "name":name,
                 "id":this.id
             }));
-            this.TopicHandlers[topic]=handler
-            this.TopicHandlers[topic+":"+name]=handler
             let subs = new busSubscription(this,topic,name);
+            this.TopicHandlers[topic]=handler(topic,subs)
+            this.TopicHandlers[topic+":"+name]=handler
+            
             return subs;
         }
         this.conn.send(JSON.stringify({
@@ -185,4 +178,3 @@ class busSubscription {
     }
 
 }
-

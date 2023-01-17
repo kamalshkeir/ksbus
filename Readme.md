@@ -1,6 +1,7 @@
-### KSbus is a zero configuration Eventbus written in Golang, it offer an easy way to share/synchronise data between your Golang servers or between you servers and browsers(JS client) , or simply between your GO and JS clients. 
+### KSbus is a zero configuration Eventbus written in Golang, it offer an easy way to share/synchronise data between your Golang servers or between you servers and browsers(JS client) , or simply between your GO and JS clients or with Python. 
 It use [Kmux](https://github.com/kamalshkeir/kmux)
 # What's New:
+- [Python client](#example-python-client) `pip install ksbus`
 - JoinCombinedServer, allow you to join a combined server, first you create a server, then you join the combined [See More](#server-bus-use-the-internal-bus-and-a-websocket-server)
 - SendToServer, allow to send data from serverBus to serverBus [See More](#server-bus-use-the-internal-bus-and-a-websocket-server)
 
@@ -319,4 +320,38 @@ BeforeDataWS = func(data map[string]any,conn *ws.Conn, originalRequest *http.Req
 BeforeServersData = func(data any,conn *ws.Conn) {
 	return
 }
+```
+
+
+## Example Python Client
+```sh
+pip install ksbus
+```
+```py
+from ksbus import Bus
+
+
+# pythonTopicHandler handle topic 'python'
+async def pythonTopicHandler(data,subs):
+    print("recv on topic python:",data)
+    # Unsubscribe
+    #await subs.Unsubscribe()
+
+# onOpen callback that let you know when connection is ready, it take the bus as param
+async def onOpen(bus):
+    print("connected")
+    # Publish publish to topic
+    await bus.Publish("top",{
+        "data":"hello from python"
+    })
+    # Subscribe, it also return the subscription
+    await bus.Subscribe("python",pythonTopicHandler)
+    # SendTo publish to named topic
+    await bus.SendTo("top:srv",{
+        "data":"hello again from python"
+    })
+    
+
+if __name__ == "__main__":
+    Bus("localhost:9313",onOpen=onOpen)
 ```

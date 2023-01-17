@@ -15,7 +15,7 @@ import websockets
 
 
 class Bus:
-    def __init__(self, addr, path="/ws/bus", secure=False, onOpen=lambda bus: None):
+    def __init__(self, addr, path="/ws/bus", secure=False, onOpen = lambda bus:None):
         self.scheme = "ws://"
         if secure:
             self.scheme = "wss://"
@@ -24,7 +24,11 @@ class Bus:
         self.topic_handlers = {}
         self.autorestart = False
         self.restartevery = 5
-        self.OnOpen = onOpen
+        if onOpen:
+            self.on_open = onOpen                           
+        else:
+            print("no onOpen callback was given in bus constructor")
+            return
         self.OnData = None
         self.on_close = lambda: None
         self.id = self.makeid(8)
@@ -32,37 +36,40 @@ class Bus:
             asyncio.get_event_loop().run_until_complete(self.connect(self.path))
         except Exception as e:
             print(e)
-
+    
     async def connect(self, path):
         try:
-            async with websockets.connect(path) as ws:
-                self.conn = ws
-                await self.sendMessage({"action": "ping", "id": self.id})
-                async for message in self.conn:
-                    obj = json.loads(message)
-                    if self.OnData is not None:
-                        await self.OnData(obj)
-                    if "topic" in obj:
-                        if obj["topic"] in self.topic_handlers:
-                            subs = BusSubscription(self, obj["topic"])
-                            if "name" in obj:
-                                subs = BusSubscription(
-                                    self, obj["topic"], obj["name"])
-                            await self.topic_handlers[obj["topic"]](obj, subs)
-                        else:
-                            print(
-                                f"topicHandler not found for: {obj['topic']}")
-                    elif "name" in obj:
-                        if obj["name"] in self.topic_handlers:
-                            subs = BusSubscription(self, obj["topic"])
-                            if "topic" in obj:
-                                subs = BusSubscription(
-                                    self, obj["topic"], obj["name"])
-                            await self.topic_handlers[obj["name"]](obj, subs)
-                        else:
-                            print(f"topicHandler not found for: {obj['name']}")
-                    elif "data" in obj and obj["data"] == "pong":
-                        await self.OnOpen(self)
+            self.conn = await websockets.connect(path)
+            await self.sendMessage({"action": "ping", "id": self.id})
+            async for message in self.conn:
+                obj = json.loads(message)
+                if self.OnData is not None:
+                    self.OnData(obj)
+                if "topic" in obj:
+                    if obj["topic"] in self.topic_handlers:
+                        subs = BusSubscription(self, obj["topic"])
+                        if "name" in obj:
+                            subs = BusSubscription(
+                                self, obj["topic"], obj["name"])
+                        self.topic_handlers[obj["topic"]](obj, subs)
+                    else:
+                        print(
+                            f"topicHandler not found for: {obj['topic']}")
+                elif "name" in obj:
+                    if obj["name"] in self.topic_handlers:
+                        subs = BusSubscription(self, obj["topic"])
+                        if "topic" in obj:
+                            subs = BusSubscription(
+                                self, obj["topic"], obj["name"])
+                        self.topic_handlers[obj["name"]](obj, subs)
+                    else:
+                        print(f"topicHandler not found for: {obj['name']}")
+                elif "data" in obj and obj["data"] == "pong":
+                    if self.on_open is None:
+                        print("no onOpen callback was given in bus constructor")
+                        return
+                    else:
+                        self.on_open(self)
         except Exception as e:
             print(f"Server closed the connection: {e}")
             if self.autorestart:
@@ -70,9 +77,9 @@ class Bus:
                 while loop:
                     print(f"Reconnecting in {self.restartevery} seconds...")
                     await asyncio.sleep(self.restartevery)
-                    self.conn = await self.connect(self.path)
+                    await self.connect(self.path)
 
-    async def Subscribe(self, topic, handler, name=""):
+    def Subscribe(self, topic, handler, name=""):
         payload = {"action": "sub", "topic": topic, "id": self.id}
         if name:
             payload["name"] = name
@@ -82,10 +89,10 @@ class Bus:
             subs = BusSubscription(self, topic)
             self.topic_handlers[topic] = handler
         if self.conn is not None:
-            await self.sendMessage(payload)
+            asyncio.create_task(self.sendMessage(payload))
         return subs
 
-    async def Unsubscribe(self, topic, name=""):
+    def Unsubscribe(self, topic, name=""):
         payload = {"action": "unsub", "topic": topic, "id": self.id}
         if name:
             payload["name"] = name
@@ -93,34 +100,36 @@ class Bus:
         else:
             del self.topic_handlers[topic]
         if topic and self.conn is not None:
-            await self.sendMessage(payload)
-
-    async def Publish(self, topic, data):
-        if self.conn is not None:
-            await self.sendMessage({"action": "pub", "topic": topic, "data": data, "id": self.id})
-        else:
-            print("Publish: Not connected to server. Please check the connection.")
-
-    async def SendTo(self, name, data, topic=""):
-        payload = {"action": "send", "name": name, "data": data, "id": self.id}
-        if self.conn is not None:
-            if topic:
-                payload["topic"] = topic
-            await self.sendMessage(payload)
-
-    async def RemoveTopic(self, topic):
-        if self.conn is not None:
-            await self.sendMessage({"action": "remove", "topic": topic, "id": self.id})
-            del self.topic_handlers[topic]
-
-    async def OnClose(self, callback):
-        self.on_close = callback
+            asyncio.create_task(self.sendMessage(payload))
 
     async def sendMessage(self, obj):
         try:
             await self.conn.send(json.dumps(obj))
         except Exception as e:
             print("error sending message:", e)
+
+    def Publish(self, topic, data):
+        if self.conn is not None:
+            asyncio.create_task(self.sendMessage(
+                {"action": "pub", "topic": topic, "data": data, "id": self.id}))
+        else:
+            print("Publish: Not connected to server. Please check the connection.")
+
+    def SendTo(self, name, data, topic=""):
+        payload = {"action": "send", "name": name, "data": data, "id": self.id}
+        if self.conn is not None:
+            if topic:
+                payload["topic"] = topic
+            asyncio.create_task(self.sendMessage(payload))
+
+    def RemoveTopic(self, topic):
+        if self.conn is not None:
+            asyncio.create_task(self.sendMessage(
+                {"action": "remove", "topic": topic, "id": self.id}))
+            del self.topic_handlers[topic]
+
+    def OnClose(self, callback):
+        self.on_close = callback
 
     def makeid(self, length):
         """helper function to generate a random string of a specified length"""
@@ -133,20 +142,22 @@ class BusSubscription:
         self.topic = topic
         self.name = name
 
-    async def Unsubscribe(self):
+    async def sendMessage(self, obj):
+        try:
+            await self.bus.conn.send(json.dumps(obj))
+        except Exception as e:
+            print("error sending message:", e)
+
+    def Unsubscribe(self):
         if self.name:
-            await self.bus.conn.send(
-                json.dumps(
-                    {
-                        "action": "unsub",
-                        "topic": self.topic,
-                        "name": self.name,
-                        "id": self.bus.id,
-                    }
-                )
-            )
+            asyncio.create_task(self.sendMessage({
+                "action": "unsub",
+                "topic": self.topic,
+                "name": self.name,
+                "id": self.bus.id,
+            }))
             del self.bus.topic_handlers[self.topic]
             del self.bus.topic_handlers[self.topic + ":" + self.name]
         else:
-            await self.bus.conn.send(json.dumps({"action": "unsub", "topic": self.topic, "id": self.bus.id}))
+            asyncio.create_task(self.sendMessage({"action": "unsub", "topic": self.topic, "id": self.bus.id}))
             del self.bus.topic_handlers[self.topic]

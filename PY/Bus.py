@@ -15,7 +15,7 @@ import websockets
 
 
 class Bus:
-    def __init__(self, addr, path="/ws/bus", secure=False,onOpen=lambda bus: None):
+    def __init__(self, addr, path="/ws/bus", secure=False, onOpen=lambda bus: None):
         self.scheme = "ws://"
         if secure:
             self.scheme = "wss://"
@@ -23,9 +23,9 @@ class Bus:
         self.conn = None
         self.topic_handlers = {}
         self.autorestart = False
-        self.restartevery = 10
+        self.restartevery = 5
         self.OnOpen = onOpen
-        self.OnData = lambda data: None
+        self.OnData = None
         self.on_close = lambda: None
         self.id = self.makeid(8)
         try:
@@ -34,38 +34,43 @@ class Bus:
             print(e)
 
     async def connect(self, path):
-        async with websockets.connect(path) as ws:
-            self.conn=ws
-            await self.sendMessage({"action": "ping", "id": self.id})
-            try:
+        try:
+            async with websockets.connect(path) as ws:
+                self.conn = ws
+                await self.sendMessage({"action": "ping", "id": self.id})
                 async for message in self.conn:
                     obj = json.loads(message)
+                    if self.OnData is not None:
+                        await self.OnData(obj)
                     if "topic" in obj:
                         if obj["topic"] in self.topic_handlers:
                             subs = BusSubscription(self, obj["topic"])
                             if "name" in obj:
-                                subs = BusSubscription(self, obj["topic"], obj["name"])
+                                subs = BusSubscription(
+                                    self, obj["topic"], obj["name"])
                             await self.topic_handlers[obj["topic"]](obj, subs)
                         else:
-                            self.OnData(obj)
-                            print(f"topicHandler not found for: {obj['topic']}")
+                            print(
+                                f"topicHandler not found for: {obj['topic']}")
                     elif "name" in obj:
                         if obj["name"] in self.topic_handlers:
                             subs = BusSubscription(self, obj["topic"])
                             if "topic" in obj:
-                                subs = BusSubscription(self, obj["topic"], obj["name"])
+                                subs = BusSubscription(
+                                    self, obj["topic"], obj["name"])
                             await self.topic_handlers[obj["name"]](obj, subs)
                         else:
-                            self.OnData(obj)
                             print(f"topicHandler not found for: {obj['name']}")
                     elif "data" in obj and obj["data"] == "pong":
                         await self.OnOpen(self)
-            except websockets.exceptions.ConnectionClosed as e:
-                print(f"Server closed the connection: {e}")
-                if self.autorestart:
+        except Exception as e:
+            print(f"Server closed the connection: {e}")
+            if self.autorestart:
+                loop = True
+                while loop:
                     print(f"Reconnecting in {self.restartevery} seconds...")
-                    asyncio.sleep(self.restartevery) 
-                    self.conn =await self.connect(self.path)
+                    await asyncio.sleep(self.restartevery)
+                    self.conn = await self.connect(self.path)
 
     async def Subscribe(self, topic, handler, name=""):
         payload = {"action": "sub", "topic": topic, "id": self.id}
@@ -97,7 +102,7 @@ class Bus:
             print("Publish: Not connected to server. Please check the connection.")
 
     async def SendTo(self, name, data, topic=""):
-        payload = {"action": "send", "name": name, "data": data,"id": self.id}
+        payload = {"action": "send", "name": name, "data": data, "id": self.id}
         if self.conn is not None:
             if topic:
                 payload["topic"] = topic
@@ -110,13 +115,17 @@ class Bus:
 
     async def OnClose(self, callback):
         self.on_close = callback
-    
-    async def sendMessage(self,obj):
-        await self.conn.send(json.dumps(obj))
+
+    async def sendMessage(self, obj):
+        try:
+            await self.conn.send(json.dumps(obj))
+        except Exception as e:
+            print("error sending message:", e)
 
     def makeid(self, length):
         """helper function to generate a random string of a specified length"""
         return "".join(random.choices(string.ascii_letters + string.digits, k=length))
+
 
 class BusSubscription:
     def __init__(self, bus, topic, name=""):

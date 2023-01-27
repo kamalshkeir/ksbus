@@ -15,7 +15,7 @@ It use [Kmux](https://github.com/kamalshkeir/kmux)
 ## Get Started
 
 ```sh
-go get github.com/kamalshkeir/ksbus@v0.8.9
+go get github.com/kamalshkeir/ksbus@v0.8.10
 ```
 
 ## You don't know where you can use it ?, here is a simple use case example:

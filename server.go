@@ -12,7 +12,6 @@ import (
 type Server struct {
 	Bus *Bus
 	App *kmux.Router
-	wg  sync.WaitGroup
 	mu  sync.Mutex
 }
 
@@ -55,8 +54,8 @@ func (s *Server) Unsubscribe(topic string, ch Channel) {
 
 func (s *Server) Publish(topic string, data map[string]any) {
 	go func() {
+		s.publishWS(topic, data)
 		bus.Publish(topic, data)
-		go s.publishWS(topic, data)
 	}()
 }
 
@@ -72,16 +71,13 @@ func (s *Server) SendTo(name string, data map[string]any) {
 		klog.Printfs("grSendTo: sending %v on %s \n", data, name)
 	}
 	data["name"] = name
-	s.wg.Add(2)
-	go func(name string, data map[string]any) {
+	go func() {
 		s.mu.Lock()
 		bus.SendTo(name, data)
-		s.wg.Done()
 		s.mu.Unlock()
-	}(name, data)
-
-	go func() {
-		defer s.wg.Done()
+		if DEBUG {
+			klog.Printfs("grafter local SendTo")
+		}
 		mWSName.Range(func(sub ClientSubscription, names []string) {
 			for _, n := range names {
 				if n == name {
@@ -95,7 +91,6 @@ func (s *Server) SendTo(name string, data map[string]any) {
 			}
 		})
 	}()
-	s.wg.Wait()
 }
 
 func (s *Server) SendToServer(addr string, data map[string]any, secure ...bool) {

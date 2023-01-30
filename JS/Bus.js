@@ -42,9 +42,18 @@ class Bus {
                     }
                     $this.TopicHandlers[obj.topic](obj,subs);          
                     return;
+                } else if(obj.name !== undefined && $this.TopicHandlers[obj.topic+":"+obj.name] !== undefined) {
+                    let subs;
+                    if (obj.name !== undefined) {
+                        subs = new busSubscription($this,obj.topic,obj.name);
+                    } else {
+                        subs = new busSubscription($this,obj.topic);
+                    }
+                    $this.TopicHandlers[obj.topic+":"+obj.name](obj,subs);          
+                    return;
                 } else {
                     $this.OnData(obj);
-                    console.log("topicHandler not found for:",obj.topic);
+                    console.log("topicHandler not found for topic:",obj.topic,obj.name,$this.TopicHandlers);
                 }
             } else if (obj.name !== undefined) {
                 if($this.TopicHandlers[obj.name] !== undefined) {
@@ -54,11 +63,18 @@ class Bus {
                     }  
                     $this.TopicHandlers[obj.name](obj,subs)               
                     return;
+                } else if($this.TopicHandlers[obj.topic+":"+obj.name] !== undefined) {
+                    let subs;
+                    if (obj.topic !== undefined) {
+                        subs = new busSubscription($this,obj.topic,obj.name);
+                    }  
+                    $this.TopicHandlers[obj.topic+":"+obj.name](obj,subs)               
+                    return;
                 } else {
                     $this.OnData(obj);
-                    console.log("topicHandler not found for:",obj.topic);
+                    console.log("topicHandler not found for name:",obj.name);
                 }
-            }
+            } 
         };
 
         $this.conn.onclose =  (e) => {
@@ -88,9 +104,8 @@ class Bus {
                 "id":this.id
             }));
             let subs = new busSubscription(this,topic,name);
-            this.TopicHandlers[topic]=handler(topic,subs)
+            this.TopicHandlers[topic]=handler
             this.TopicHandlers[topic+":"+name]=handler
-            
             return subs;
         }
         this.conn.send(JSON.stringify({

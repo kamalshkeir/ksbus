@@ -9,7 +9,7 @@ class Bus {
         this.TopicHandlers={};
         this.autorestart=false;
         this.restartevery=10;
-        this.OnOpen=(e) =>{};
+        this.OnOpen=() =>{};
         this.OnData=(data) =>{};
         this.id=this.makeid(8);
         this.conn=this.connect(this.path,this.callback);

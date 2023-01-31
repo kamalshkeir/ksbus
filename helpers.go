@@ -54,14 +54,28 @@ func (s *Server) addWS(id, topic string, conn *ws.Conn) {
 	}
 }
 
+func addNamedWS(topic, name, id string, conn *ws.Conn) {
+	clientSub := ClientSubscription{
+		Id:    id,
+		Name:  name,
+		Topic: topic,
+		Conn:  conn,
+	}
+	if v, ok := mWSName.Get(clientSub); ok {
+		v = append(v, topic+":"+name)
+		mWSName.Set(ClientSubscription{Conn: conn, Id: id, Topic: topic, Name: name}, v)
+	} else {
+		mWSName.Set(ClientSubscription{Conn: conn, Id: id, Topic: topic, Name: name}, []string{topic + ":" + name})
+	}
+}
+
 func (s *Server) removeWS(wsConn *ws.Conn) {
 	go func() {
 		mWSName.Range(func(key ClientSubscription, value []string) {
 			if key.Conn == wsConn {
-				mWSName.Delete(key)
+				go mWSName.Delete(key)
 			}
 		})
-
 		s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
 			for i, sub := range value {
 				if sub.Conn == wsConn {
@@ -71,7 +85,7 @@ func (s *Server) removeWS(wsConn *ws.Conn) {
 						mLocalTopics.Delete(key)
 						if keepServing {
 							mSubscribedServers.Range(func(addr string, value *Client) {
-								s.sendData(addr, map[string]any{
+								go s.sendData(addr, map[string]any{
 									"action":          "remove_node_topic",
 									"addr":            LocalAddress,
 									"topic_to_delete": key,
@@ -85,26 +99,28 @@ func (s *Server) removeWS(wsConn *ws.Conn) {
 
 		mServersConnectionsSendToServer.Range(func(key string, value *ws.Conn) {
 			if value == wsConn {
-				mServersConnectionsSendToServer.Delete(key)
+				go mServersConnectionsSendToServer.Delete(key)
 			}
 		})
 	}()
 }
 
 func (s *Server) unsubscribeWS(id, topic string, wsConn *ws.Conn) {
-	go s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
-		for i, sub := range value {
-			if sub.Conn == wsConn {
-				value = append(value[:i], value[i+1:]...)
-				s.Bus.wsSubscribers.Set(key, value)
+	go func() {
+		s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
+			for i, sub := range value {
+				if sub.Conn == wsConn {
+					value = append(value[:i], value[i+1:]...)
+					go s.Bus.wsSubscribers.Set(key, value)
+				}
 			}
-		}
-	})
-	go mWSName.Range(func(key ClientSubscription, value []string) {
-		if key.Conn == wsConn {
-			mWSName.Delete(key)
-		}
-	})
+		})
+		mWSName.Range(func(key ClientSubscription, value []string) {
+			if key.Conn == wsConn {
+				go mWSName.Delete(key)
+			}
+		})
+	}()
 }
 
 func (server *Server) AllTopics() []string {
@@ -148,8 +164,7 @@ func (server *Server) handleWS(addr string) {
 				if send {
 					mSubscribedServers.Range(func(key string, value *Client) {
 						m["from_publisher"] = LocalAddress
-						fmt.Println("Server sending data to ", key, m)
-						server.sendData(key, m)
+						go server.sendData(key, m)
 					})
 				}
 			}
@@ -217,7 +232,7 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 				if keepServing {
 					go func() {
 						mSubscribedServers.Range(func(key string, value *Client) {
-							server.sendData(key, map[string]any{
+							go server.sendData(key, map[string]any{
 								"from_publisher": LocalAddress,
 								"action":         "topics",
 								"addr":           LocalAddress,
@@ -243,13 +258,15 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 					mWSName.Range(func(key ClientSubscription, value []string) {
 						for i, v := range value {
 							if id, ok := m["id"]; ok {
-								if topic.(string)+":"+v == nn || v == nn || key.Id == id {
+								if topic.(string) == nn || topic.(string)+":"+v == nn || v == nn || key.Id == id {
+									fmt.Println("found before:", value)
 									value = append(value[:i], value[i+1:]...)
+									fmt.Println("found after:", value)
 									if len(value) == 0 {
-										mLocalTopics.Delete(topic.(string) + ":" + v)
-										mLocalTopics.Delete(v)
+										go mLocalTopics.Delete(topic.(string) + ":" + v)
+										go mLocalTopics.Delete(v)
 									}
-									mWSName.Set(key, value)
+									go mWSName.Set(key, value)
 								}
 							} else {
 								fmt.Println("id not found, will not be removed:", m)
@@ -260,7 +277,7 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 				if keepServing {
 					go func() {
 						mSubscribedServers.Range(func(key string, value *Client) {
-							server.sendData(key, map[string]any{
+							go server.sendData(key, map[string]any{
 								"from_publisher": LocalAddress,
 								"action":         "topics",
 								"addr":           LocalAddress,
@@ -269,10 +286,6 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 						})
 					}()
 				}
-			} else {
-				c.Json(map[string]any{
-					"error": "topic missing",
-				})
 			}
 		case "remove_topic", "removeTopic":
 			if topic, ok := m["topic"]; ok {
@@ -280,7 +293,7 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 				if keepServing {
 					go func() {
 						mSubscribedServers.Range(func(key string, value *Client) {
-							server.sendData(key, map[string]any{
+							go server.sendData(key, map[string]any{
 								"from_publisher": LocalAddress,
 								"action":         "topics",
 								"addr":           LocalAddress,
@@ -390,21 +403,6 @@ func setName(ch Channel, name string) {
 		}
 	} else {
 		mChannelName.Set(ch, []string{ch.Name})
-	}
-}
-
-func addNamedWS(topic, name, id string, conn *ws.Conn) {
-	clientSub := ClientSubscription{
-		Id:    id,
-		Name:  name,
-		Topic: topic,
-		Conn:  conn,
-	}
-	if v, ok := mWSName.Get(clientSub); ok {
-		v = append(v, topic+":"+name)
-		mWSName.Set(ClientSubscription{Conn: conn, Id: id, Topic: topic, Name: name}, v)
-	} else {
-		mWSName.Set(ClientSubscription{Conn: conn, Id: id, Topic: topic, Name: name}, []string{topic + ":" + name})
 	}
 }
 

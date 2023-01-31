@@ -111,7 +111,7 @@ func (b *Bus) UnsubscribeId(topic, id string) {
 	}
 	mChannelName.Range(func(key Channel, value []string) {
 		if key.Id == id {
-			mChannelName.Delete(key)
+			go mChannelName.Delete(key)
 		}
 	})
 }
@@ -135,7 +135,7 @@ func (b *Bus) RemoveTopic(topic string) {
 		for i, v := range topicss {
 			if v == topic {
 				topicss = append(topicss[:i], topicss[i+1:]...)
-				mWSName.Set(key, topicss)
+				go mWSName.Set(key, topicss)
 			}
 		}
 	})

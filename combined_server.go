@@ -194,7 +194,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 								if id, ok := m["id"]; ok {
 									if topic+":"+v == nn || v == nn || key.Id == id {
 										value = append(value[:i], value[i+1:]...)
-										mWSName.Set(key, value)
+										go mWSName.Set(key, value)
 										mLocalTopics.Delete(nn.(string))
 									}
 								} else {
@@ -217,7 +217,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 				mServersTopics.Range(func(addr string, value map[string]bool) {
 					if addr == publisher {
 						value[m["topic"].(string)] = true
-						mServersTopics.Set(addr, value)
+						go mServersTopics.Set(addr, value)
 					}
 				})
 			} else {
@@ -247,7 +247,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 									mServersTopics.Range(func(addr string, topics map[string]bool) {
 										if _, ok := topics[topic]; ok {
 											if client, ok := mSubscribedServers.Get(addr); ok {
-												client.SendTo(topic, m)
+												go client.SendTo(topic, m)
 											}
 										}
 									})
@@ -259,7 +259,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 									mServersTopics.Range(func(addr string, topics map[string]bool) {
 										if _, ok := topics[topic]; ok {
 											if client, ok := mSubscribedServers.Get(addr); ok {
-												client.SendTo(topic, m)
+												go client.SendTo(topic, m)
 											}
 										}
 									})
@@ -282,7 +282,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 								mServersTopics.Range(func(addr string, topics map[string]bool) {
 									if _, ok := topics[topic+":"+name.(string)]; ok {
 										if client, ok := mSubscribedServers.Get(addr); ok {
-											client.SendTo(topic+":"+name.(string), m)
+											go client.SendTo(topic+":"+name.(string), m)
 										}
 									}
 								})
@@ -296,7 +296,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 								mServersTopics.Range(func(addr string, topics map[string]bool) {
 									if _, ok := topics[name.(string)]; ok {
 										if client, ok := mSubscribedServers.Get(addr); ok {
-											client.SendTo(name.(string), m)
+											go client.SendTo(name.(string), m)
 										}
 									}
 								})
@@ -335,7 +335,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 			mServersTopics.Range(func(addr string, topics map[string]bool) {
 				if addr == addrr.(string) {
 					delete(topics, tp.(string))
-					mServersTopics.Set(addr, topics)
+					go mServersTopics.Set(addr, topics)
 				}
 			})
 		case "new_node":

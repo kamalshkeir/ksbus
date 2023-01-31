@@ -73,24 +73,21 @@ func (s *Server) SendTo(name string, data map[string]any) {
 	data["name"] = name
 	go func() {
 		s.mu.Lock()
+		defer s.mu.Unlock()
 		bus.SendTo(name, data)
-		s.mu.Unlock()
-		if DEBUG {
-			klog.Printfs("grafter local SendTo")
-		}
-		mWSName.Range(func(sub ClientSubscription, names []string) {
-			for _, n := range names {
-				if n == name {
-					s.mu.Lock()
-					err := sub.Conn.WriteJSON(data)
-					if err != nil {
-						klog.Printf("rderr:%v\n", err)
-					}
-					s.mu.Unlock()
+	}()
+	go mWSName.Range(func(sub ClientSubscription, names []string) {
+		for _, n := range names {
+			if n == name {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				err := sub.Conn.WriteJSON(data)
+				if err != nil {
+					klog.Printf("rderr:%v\n", err)
 				}
 			}
-		})
-	}()
+		}
+	})
 }
 
 func (s *Server) SendToServer(addr string, data map[string]any, secure ...bool) {

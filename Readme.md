@@ -15,7 +15,7 @@ It use [Kmux](https://github.com/kamalshkeir/kmux)
 ## Get Started
 
 ```sh
-go get github.com/kamalshkeir/ksbus@v0.9.3
+go get github.com/kamalshkeir/ksbus@v0.9.4
 ```
 
 ## You don't know where you can use it ?, here is a simple use case example:
@@ -68,7 +68,7 @@ func (b *Bus) Subscribe(topic string, fn func(data map[string]any, ch Channel),n
 func (b *Bus) Unsubscribe(topic string,ch Channel)
 func (b *Bus) Publish(topic string, data map[string]any)
 func (b *Bus) RemoveTopic(topic string)
-func (b *Bus) SendTo(name string, data map[string]any)
+func (b *Bus) SendToNamed(name string, data map[string]any)
 // in param and returned subscribe channel
 func (ch Channel) Unsubscribe() Channel 
 ```
@@ -82,7 +82,7 @@ func (s *Server) Subscribe(topic string, fn func(data map[string]any,ch Channel)
 func (s *Server) Unsubscribe(topic string, ch Channel)
 func (s *Server) Publish(topic string, data map[string]any)
 func (s *Server) RemoveTopic(topic string)
-func (s *Server) SendTo(name string, data map[string]any)
+func (s *Server) SendToNamed(name string, data map[string]any)
 func (s *Server) Run(addr string)
 func (s *Server) RunTLS(addr string, cert string, certKey string)
 func (s *Server) RunAutoTLS(domainName string, subDomains ...string)
@@ -103,7 +103,7 @@ func main() {
 		c.Html("index.html",nil)
 	})
 
-    // if you specify a name 'go' to this subscription like below, you will receive data from any Publish on topic 'server' AND SendTo on 'server:go' name, so SendTo allow you to send not for all listeners on the topic, but the unique named one 'topic1:go'
+    // if you specify a name 'go' to this subscription like below, you will receive data from any Publish on topic 'server' AND SendToNamed on 'server:go' name, so SendToNamed allow you to send not for all listeners on the topic, but the unique named one 'topic1:go'
 	bus.Subscribe("server",func(data map[string]any, ch ksbus.Channel) {
 		log.Println("server recv:",data)
 	},"go")
@@ -129,7 +129,7 @@ func (client *Client) Subscribe(topic string,handler func(data map[string]any,su
 func (client *Client) Unsubscribe(topic string)
 func (client *Client) Publish(topic string, data map[string]any) 
 func (client *Client) RemoveTopic(topic string)
-func (client *Client) SendTo(name string, data map[string]any)
+func (client *Client) SendToNamed(name string, data map[string]any)
 func (client *Client) Run()
 
 // param and returned subscription
@@ -141,12 +141,12 @@ func (subscribtion *ClientSubscription) Unsubscribe() (*ClientSubscription)
 func main() {
 	client,_ := ksbus.NewClient("localhost:9313",false)
 
-    // if you specify a name 'go' to this subscription like below, you will receive data from any Publish on topic 'topic1' AND any SendTo on 'topic1:go' name, so SendTo allow you to send not for all listeners on the topic, but the unique named one 'topic1:go'
+    // if you specify a name 'go' to this subscription like below, you will receive data from any Publish on topic 'topic1' AND any SendToNamed on 'topic1:go' name, so SendToNamed allow you to send not for all listeners on the topic, but the unique named one 'topic1:go'
 	client.Subscribe("topic1",func(data map[string]any, unsub *ksbus.ClientSubscription) {
 		fmt.Println("client recv",data)
 	},"go")
 
-    // this will only receive on Publish on topic 'topic2', because no name specified , so you can't send only for this one using SendTo
+    // this will only receive on Publish on topic 'topic2', because no name specified , so you can't send only for this one using SendToNamed
     client.Subscribe("topic2",func(data map[string]any, unsub *ksbus.ClientSubscription) {
 		fmt.Println("client recv",data)
 	})
@@ -167,7 +167,7 @@ OnOpen(e)
 Subscribe(topic,handler,name="")
 Unsubscribe(topic,name="")
 Publish(topic,data)
-SendTo(name,data,topic="")
+SendToNamed(name,data,topic="")
 RemoveTopic(topic)
 ```
 
@@ -204,7 +204,7 @@ bus.OnOpen = (e) => {
 btn.addEventListener("click",(e) => {
     e.preventDefault();
     // send to only one connection , our go client in this case, so this is a communication between client js and client go
-    bus.SendTo("client:go",{
+    bus.SendToNamed("client:go",{
         "msg":"hello go client from client js"
     })
 })
@@ -221,7 +221,7 @@ btn.addEventListener("click",(e) => {
 func NewCombinedServer(newAddress string,secure bool, serversAddrs ...AddressOption) *CombinedServer
 func (s *CombinedServer) Subscribe(topic string, fn func(data map[string]any, ch Channel), name ...string) (ch Channel)
 func (s *CombinedServer) Unsubscribe(topic string, ch Channel)
-func (s *CombinedServer) SendTo(name string, data map[string]any)
+func (s *CombinedServer) SendToNamed(name string, data map[string]any)
 func (s *CombinedServer) Publish(topic string, data map[string]any)
 func (s *CombinedServer) RemoveTopic(topic string)
 func (s *CombinedServer) Run()
@@ -325,8 +325,7 @@ BeforeServersData = func(data any,conn *ws.Conn) {
 
 ## Example Python Client
 ```sh
-pip install ksbus==1.1.0
-# if it doesn't work, run it again
+pip install ksbus==1.2.0
 ```
 ```py
 from ksbus import Bus
@@ -343,7 +342,7 @@ def onOpen(bus):
     # Subscribe, it also return the subscription
     bus.Subscribe("python", pythonTopicHandler)
     # SendTo publish to named topic
-    bus.SendTo("top:srv", {
+    bus.SendToNamed("top:srv", {
         "data": "hello again from python"
     })
     # bus.Unsubscribe("python")

@@ -152,7 +152,7 @@ class Bus {
         }));
     }
 
-    SendTo(name,data,topic="") {
+    SendToNamed(name,data,topic="") {
         let toSenddata = {
             "action":"send",
             "name":name,

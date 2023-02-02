@@ -45,6 +45,11 @@ class Bus:
                 obj = json.loads(message)
                 if self.OnData is not None:
                     self.OnData(obj)
+                if "event_id" in obj:
+                    self.Publish(obj["event_id"],{
+                        "success":"got the event",
+                        "id":self.id
+                    })
                 if "topic" in obj:
                     if obj["topic"] in self.topic_handlers:
                         subs = BusSubscription(self, obj["topic"])
@@ -115,7 +120,7 @@ class Bus:
         else:
             print("Publish: Not connected to server. Please check the connection.")
 
-    def SendTo(self, name, data, topic=""):
+    def SendToNamed(self, name, data, topic=""):
         payload = {"action": "send", "name": name, "data": data, "id": self.id}
         if self.conn is not None:
             if topic:

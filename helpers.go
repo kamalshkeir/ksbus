@@ -61,19 +61,19 @@ func addNamedWS(topic, name, id string, conn *ws.Conn) {
 		Topic: topic,
 		Conn:  conn,
 	}
-	if v, ok := mWSName.Get(clientSub); ok {
+	if v, ok := clientSubNames.Get(clientSub); ok {
 		v = append(v, topic+":"+name)
-		mWSName.Set(ClientSubscription{Conn: conn, Id: id, Topic: topic, Name: name}, v)
+		clientSubNames.Set(ClientSubscription{Conn: conn, Id: id, Topic: topic, Name: name}, v)
 	} else {
-		mWSName.Set(ClientSubscription{Conn: conn, Id: id, Topic: topic, Name: name}, []string{topic + ":" + name})
+		clientSubNames.Set(ClientSubscription{Conn: conn, Id: id, Topic: topic, Name: name}, []string{topic + ":" + name})
 	}
 }
 
 func (s *Server) removeWS(wsConn *ws.Conn) {
 	go func() {
-		mWSName.Range(func(key ClientSubscription, value []string) {
+		clientSubNames.Range(func(key ClientSubscription, value []string) {
 			if key.Conn == wsConn {
-				go mWSName.Delete(key)
+				go clientSubNames.Delete(key)
 			}
 		})
 		s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
@@ -82,9 +82,9 @@ func (s *Server) removeWS(wsConn *ws.Conn) {
 					value = append(value[:i], value[i+1:]...)
 					go s.Bus.wsSubscribers.Set(key, value)
 					if len(value) == 0 {
-						mLocalTopics.Delete(key)
+						s.localTopics.Delete(key)
 						if keepServing {
-							mSubscribedServers.Range(func(addr string, value *Client) {
+							s.subscribedServersClients.Range(func(addr string, value *Client) {
 								go s.sendData(addr, map[string]any{
 									"action":          "remove_node_topic",
 									"addr":            LocalAddress,
@@ -97,9 +97,9 @@ func (s *Server) removeWS(wsConn *ws.Conn) {
 			}
 		})
 
-		mServersConnectionsSendToServer.Range(func(key string, value *ws.Conn) {
+		s.sendToServerConnections.Range(func(key string, value *ws.Conn) {
 			if value == wsConn {
-				go mServersConnectionsSendToServer.Delete(key)
+				go s.sendToServerConnections.Delete(key)
 			}
 		})
 	}()
@@ -115,9 +115,9 @@ func (s *Server) unsubscribeWS(id, topic string, wsConn *ws.Conn) {
 				}
 			}
 		})
-		mWSName.Range(func(key ClientSubscription, value []string) {
+		clientSubNames.Range(func(key ClientSubscription, value []string) {
 			if key.Conn == wsConn {
-				go mWSName.Delete(key)
+				go clientSubNames.Delete(key)
 			}
 		})
 	}()
@@ -131,7 +131,7 @@ func (server *Server) AllTopics() []string {
 	server.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
 		res[key] = struct{}{}
 	})
-	mWSName.Range(func(key ClientSubscription, value []string) {
+	clientSubNames.Range(func(key ClientSubscription, value []string) {
 		for _, v := range value {
 			res[v] = struct{}{}
 		}
@@ -162,7 +162,7 @@ func (server *Server) handleWS(addr string) {
 					send = false
 				}
 				if send {
-					mSubscribedServers.Range(func(key string, value *Client) {
+					server.subscribedServersClients.Range(func(key string, value *Client) {
 						m["from_publisher"] = LocalAddress
 						go server.sendData(key, m)
 					})
@@ -217,26 +217,26 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 					server.Bus.mu.Lock()
 					server.addWS(id.(string), topic.(string), c.Ws)
 					server.Bus.mu.Unlock()
-					mLocalTopics.Set(topic.(string), true)
+					server.localTopics.Set(topic.(string), true)
 				} else {
 					fmt.Println("id not found, will not be added:", m)
 				}
 				if v, ok := m["name"]; ok {
 					if id, ok := m["id"]; ok {
 						addNamedWS(topic.(string), v.(string), id.(string), c.Ws)
-						mLocalTopics.Set(topic.(string)+":"+v.(string), true)
+						server.localTopics.Set(topic.(string)+":"+v.(string), true)
 					} else {
 						fmt.Println("id not found, will not be added:", m)
 					}
 				}
 				if keepServing {
 					go func() {
-						mSubscribedServers.Range(func(key string, value *Client) {
+						server.subscribedServersClients.Range(func(key string, value *Client) {
 							go server.sendData(key, map[string]any{
 								"from_publisher": LocalAddress,
 								"action":         "topics",
 								"addr":           LocalAddress,
-								"topics":         mLocalTopics.Keys(),
+								"topics":         server.localTopics.Keys(),
 							})
 						})
 					}()
@@ -255,18 +255,16 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 					fmt.Println("id not found, will not be removed:", m)
 				}
 				if nn, ok := m["name"]; ok {
-					mWSName.Range(func(key ClientSubscription, value []string) {
+					clientSubNames.Range(func(key ClientSubscription, value []string) {
 						for i, v := range value {
 							if id, ok := m["id"]; ok {
-								if topic.(string) == nn || topic.(string)+":"+v == nn || v == nn || key.Id == id {
-									fmt.Println("found before:", value)
+								if (topic.(string) == nn || topic.(string)+":"+v == nn || v == nn) && key.Id == id {
 									value = append(value[:i], value[i+1:]...)
-									fmt.Println("found after:", value)
 									if len(value) == 0 {
-										go mLocalTopics.Delete(topic.(string) + ":" + v)
-										go mLocalTopics.Delete(v)
+										go server.localTopics.Delete(topic.(string) + ":" + v)
+										go server.localTopics.Delete(v)
 									}
-									go mWSName.Set(key, value)
+									go clientSubNames.Set(key, value)
 								}
 							} else {
 								fmt.Println("id not found, will not be removed:", m)
@@ -276,12 +274,12 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 				}
 				if keepServing {
 					go func() {
-						mSubscribedServers.Range(func(key string, value *Client) {
+						server.subscribedServersClients.Range(func(key string, value *Client) {
 							go server.sendData(key, map[string]any{
 								"from_publisher": LocalAddress,
 								"action":         "topics",
 								"addr":           LocalAddress,
-								"topics":         mLocalTopics.Keys(),
+								"topics":         server.localTopics.Keys(),
 							})
 						})
 					}()
@@ -292,12 +290,12 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 				server.RemoveTopic(topic.(string))
 				if keepServing {
 					go func() {
-						mSubscribedServers.Range(func(key string, value *Client) {
+						server.subscribedServersClients.Range(func(key string, value *Client) {
 							go server.sendData(key, map[string]any{
 								"from_publisher": LocalAddress,
 								"action":         "topics",
 								"addr":           LocalAddress,
-								"topics":         mLocalTopics.Keys(),
+								"topics":         server.localTopics.Keys(),
 							})
 						})
 					}()
@@ -354,12 +352,13 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 			if sc, ok := m["secure"]; ok {
 				if v, ok := sc.(bool); ok {
 					keepServing = true
-					client, err := NewClient(m["addr"].(string), v)
+					client := NewClient()
+					err := client.Connect(m["addr"].(string), v)
 					klog.CheckError(err)
-					mSubscribedServers.Set(m["addr"].(string), client)
+					server.subscribedServersClients.Set(m["addr"].(string), client)
 					topics := server.AllTopics()
 					for _, t := range topics {
-						mLocalTopics.Set(t, true)
+						server.localTopics.Set(t, true)
 					}
 					client.sendDataToServer(map[string]any{
 						"action": "topics",
@@ -388,7 +387,7 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 	}
 }
 
-func setName(ch Channel, name string) {
+func (b *Bus) setName(ch Channel, name string) {
 	ch.Name = name
 	if ch.Topic != "" && ch.Name != "" {
 		ch.Name = ch.Topic + ":" + ch.Name
@@ -396,13 +395,13 @@ func setName(ch Channel, name string) {
 	if ch.Id == "" {
 		ch.Id = GenerateRandomString(5)
 	}
-	if v, ok := mChannelName.Get(ch); ok {
+	if v, ok := b.channelsName.Get(ch); ok {
 		if !kmux.SliceContains(v, ch.Name) {
 			v = append(v, ch.Name)
-			mChannelName.Set(ch, v)
+			b.channelsName.Set(ch, v)
 		}
 	} else {
-		mChannelName.Set(ch, []string{ch.Name})
+		b.channelsName.Set(ch, []string{ch.Name})
 	}
 }
 

@@ -7,16 +7,21 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/kmux/ws"
 )
 
 type Client struct {
-	id         string
-	serverAddr string
-	conn       *ws.Conn
-	done       chan struct{}
+	Id            string
+	ServerAddr    string
+	RestartEvery  time.Duration
+	Conn          *ws.Conn
+	Autorestart   bool
+	Done          chan struct{}
+	topicHandlers *kmap.SafeMap[string, func(map[string]any, *ClientSubscription)]
 }
 
 type ClientSubscription struct {
@@ -26,7 +31,20 @@ type ClientSubscription struct {
 	Conn  *ws.Conn
 }
 
-func NewClient(addr string, secure bool, path ...string) (*Client, error) {
+var clientId string
+
+func NewClient() *Client {
+	clientId = GenerateRandomString(10)
+	return &Client{
+		Id:            clientId,
+		Autorestart:   false,
+		RestartEvery:  10 * time.Second,
+		topicHandlers: kmap.New[string, func(map[string]any, *ClientSubscription)](false),
+		Done:          make(chan struct{}),
+	}
+}
+
+func (client *Client) Connect(addr string, secure bool, path ...string) error {
 	sch := "ws"
 	if CLIENT_SECURE || secure {
 		CLIENT_SECURE = true
@@ -37,38 +55,37 @@ func NewClient(addr string, secure bool, path ...string) (*Client, error) {
 		spath = path[0]
 	}
 	u := url.URL{Scheme: sch, Host: addr, Path: spath}
-
+	client.ServerAddr = u.String()
 	c, resp, err := ws.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
+		if client.Autorestart {
+			klog.Printfs("grRestarting\n")
+			time.Sleep(client.RestartEvery)
+			RestartSelf()
+		}
 		if err == ws.ErrBadHandshake {
 			if DEBUG {
 				klog.Printf("rdhandshake failed with status %d \n", resp.StatusCode)
 			}
-			return nil, err
+			return err
 		}
 
 		if err == ws.ErrCloseSent {
 			if DEBUG {
 				klog.Printf("rdserver connection closed with status %d \n", resp.StatusCode)
 			}
-			return nil, err
+			return err
 		} else {
 			if DEBUG {
 				klog.Printf("rdNewClient error:%v\n", err)
 			}
-			return nil, err
+			return err
 		}
 	}
-
-	client := &Client{
-		id:         GenerateRandomString(5),
-		serverAddr: u.String(),
-		conn:       c,
-		done:       make(chan struct{}),
-	}
+	client.Conn = c
 	client.handle()
 	klog.Printfs("client connected to %s\n", u.String())
-	return client, nil
+	return nil
 }
 
 func (client *Client) handle() {
@@ -78,20 +95,20 @@ func (client *Client) handle() {
 
 		found := false
 		if okTopic && okName {
-			if fn, ok := mClientTopicHandlers.Get(v1.(string) + ":" + v2.(string)); ok {
+			if fn, ok := client.topicHandlers.Get(v1.(string) + ":" + v2.(string)); ok {
 				found = true
 				fn(data, sub)
 			}
 		} else if okTopic {
 			if vv, ok := v1.(string); ok {
-				if fn, ok := mClientTopicHandlers.Get(vv); ok {
+				if fn, ok := client.topicHandlers.Get(vv); ok {
 					found = true
 					fn(data, sub)
 				}
 			}
 		} else if okName {
 			if vv, ok := v2.(string); ok {
-				if fn, ok := mClientTopicHandlers.Get(vv); ok {
+				if fn, ok := client.topicHandlers.Get(vv); ok {
 					found = true
 					fn(data, sub)
 				}
@@ -104,7 +121,7 @@ func (client *Client) handle() {
 }
 
 func (client *Client) Subscribe(topic string, handler func(data map[string]any, sub *ClientSubscription), name ...string) *ClientSubscription {
-	id := client.id
+	id := client.Id
 	data := map[string]any{
 		"action": "sub",
 		"topic":  topic,
@@ -116,27 +133,27 @@ func (client *Client) Subscribe(topic string, handler func(data map[string]any, 
 		nn = name[0]
 	}
 
-	err := client.conn.WriteJSON(data)
+	err := client.Conn.WriteJSON(data)
 	if err != nil {
 		fmt.Println("error subscribing on", topic, err)
 		return &ClientSubscription{
 			Id:    id,
 			Topic: topic,
 			Name:  nn,
-			Conn:  client.conn,
+			Conn:  client.Conn,
 		}
 	}
 	if nn != "" {
-		mClientTopicHandlers.Set(topic, handler)
-		mClientTopicHandlers.Set(topic+":"+nn, handler)
+		client.topicHandlers.Set(topic, handler)
+		client.topicHandlers.Set(topic+":"+nn, handler)
 	} else {
-		mClientTopicHandlers.Set(topic, handler)
+		client.topicHandlers.Set(topic, handler)
 	}
 	return &ClientSubscription{
 		Id:    id,
 		Topic: topic,
 		Name:  nn,
-		Conn:  client.conn,
+		Conn:  client.Conn,
 	}
 }
 
@@ -144,9 +161,9 @@ func (client *Client) Unsubscribe(topic string) {
 	data := map[string]any{
 		"action": "unsub",
 		"topic":  topic,
-		"id":     client.id,
+		"id":     client.Id,
 	}
-	err := client.conn.WriteJSON(data)
+	err := client.Conn.WriteJSON(data)
 	if err != nil {
 		fmt.Println("error unsubscribing on", topic, err, data)
 		return
@@ -158,33 +175,33 @@ func (client *Client) Publish(topic string, data map[string]any) {
 		"data":   data,
 		"action": "pub",
 		"topic":  topic,
-		"id":     client.id,
+		"id":     client.Id,
 	}
-	_ = client.conn.WriteJSON(data)
+	_ = client.Conn.WriteJSON(data)
 }
 
 func (client *Client) RemoveTopic(topic string) {
 	data := map[string]any{
 		"action": "removeTopic",
 		"topic":  topic,
-		"id":     client.id,
+		"id":     client.Id,
 	}
-	err := client.conn.WriteJSON(data)
+	err := client.Conn.WriteJSON(data)
 	if err != nil {
 		fmt.Println("error RemoveTopic, data:", data, ", err:", err)
 		return
 	}
-	mClientTopicHandlers.Delete(topic)
+	client.topicHandlers.Delete(topic)
 }
 
-func (client *Client) SendTo(name string, data map[string]any) {
+func (client *Client) SendToNamed(name string, data map[string]any) {
 	data = map[string]any{
 		"action": "sendTo",
 		"name":   name,
 		"data":   data,
-		"id":     client.id,
+		"id":     client.Id,
 	}
-	err := client.conn.WriteJSON(data)
+	err := client.Conn.WriteJSON(data)
 	if err != nil {
 		klog.Printfs("error SendTo, data: %v, err: %v\n", data, err)
 		return
@@ -192,8 +209,8 @@ func (client *Client) SendTo(name string, data map[string]any) {
 }
 
 func (client *Client) sendDataToServer(data map[string]any) {
-	data["id"] = client.id
-	err := client.conn.WriteJSON(data)
+	data["id"] = client.Id
+	err := client.Conn.WriteJSON(data)
 	if err != nil {
 		fmt.Println("error SendTo, data:", data, ", err:", err)
 		return
@@ -201,16 +218,16 @@ func (client *Client) sendDataToServer(data map[string]any) {
 }
 
 func (client *Client) Close() error {
-	err := client.conn.WriteMessage(ws.CloseMessage, ws.FormatCloseMessage(ws.CloseNormalClosure, ""))
+	err := client.Conn.WriteMessage(ws.CloseMessage, ws.FormatCloseMessage(ws.CloseNormalClosure, ""))
 	if err != nil {
 		return err
 	}
-	err = client.conn.Close()
+	err = client.Conn.Close()
 	if err != nil {
 		return err
 	}
-	client.conn = nil
-	<-client.done
+	client.Conn = nil
+	<-client.Done
 	return nil
 }
 
@@ -219,7 +236,7 @@ func (client *Client) Run() {
 	signal.Notify(interrupt, os.Interrupt)
 	for {
 		select {
-		case <-client.done:
+		case <-client.Done:
 			return
 		case <-interrupt:
 			log.Println("interrupt")
@@ -234,7 +251,7 @@ func (subscribtion *ClientSubscription) Unsubscribe() *ClientSubscription {
 		"action": "unsub",
 		"topic":  subscribtion.Topic,
 		"name":   subscribtion.Name,
-		"id":     subscribtion.Id,
+		"id":     clientId,
 	}
 	err := subscribtion.Conn.WriteJSON(data)
 	if err != nil {
@@ -246,14 +263,20 @@ func (subscribtion *ClientSubscription) Unsubscribe() *ClientSubscription {
 
 func (client *Client) handleData(fn func(data map[string]any, sub *ClientSubscription)) {
 	go func() {
-		defer close(client.done)
+		defer close(client.Done)
 		for {
 			message := map[string]any{}
-			if client.conn != nil {
-				err := client.conn.ReadJSON(&message)
-				if err != nil && (err == ws.ErrCloseSent || strings.Contains(err.Error(), "use of closed network connection")) {
-					klog.Printfs("rdOnData error:%v\n", err)
-					return
+			if client.Conn != nil {
+				err := client.Conn.ReadJSON(&message)
+				if err != nil && (err == ws.ErrCloseSent || strings.Contains(err.Error(), "forcibly closed")) {
+					if client.Autorestart {
+						klog.Printfs("grRestarting\n")
+						time.Sleep(client.RestartEvery)
+						RestartSelf()
+					} else {
+						klog.Printfs("rdClosed connection error:%v\n", err)
+						return
+					}
 				} else if err != nil {
 					klog.Printfs("rdOnData error:%v\n", err)
 					return
@@ -261,10 +284,10 @@ func (client *Client) handleData(fn func(data map[string]any, sub *ClientSubscri
 				if DEBUG {
 					klog.Printfs("client handleData recv: %v\n", message)
 				}
-				contin := BeforeDataWS(message, client.conn, nil)
+				contin := BeforeDataWS(message, client.Conn, nil)
 				if contin {
 					sub := ClientSubscription{
-						Conn: client.conn,
+						Conn: client.Conn,
 					}
 					if v, ok := message["topic"]; ok {
 						sub.Topic = v.(string)

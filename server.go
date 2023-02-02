@@ -5,32 +5,46 @@ import (
 	"sync"
 
 	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/kmux"
 	"github.com/kamalshkeir/kmux/ws"
 )
 
 type Server struct {
-	Bus *Bus
-	App *kmux.Router
-	mu  sync.Mutex
+	Bus                      *Bus
+	App                      *kmux.Router
+	sendToServerConnections  *kmap.SafeMap[string, *ws.Conn]
+	subscribedServersClients *kmap.SafeMap[string, *Client]
+	localTopics              *kmap.SafeMap[string, bool]
+	mu                       sync.Mutex
 }
 
-func NewServer() *Server {
+func NewServer(bus ...*Bus) *Server {
+	var b *Bus
+	if len(bus) > 0 {
+		b = bus[0]
+	} else {
+		b = New()
+	}
 	app := kmux.New()
 	server := Server{
-		Bus: bus,
-		App: app,
+		Bus:                      b,
+		App:                      app,
+		sendToServerConnections:  kmap.New[string, *ws.Conn](false),
+		subscribedServersClients: kmap.New[string, *Client](false),
+		localTopics:              kmap.New[string, bool](false),
 	}
 	return &server
 }
 
 func (s *Server) JoinCombinedServer(combinedAddr string, secure bool) error {
 	keepServing = true
-	client, err := NewClient(combinedAddr, secure)
+	client := NewClient()
+	err := client.Connect(combinedAddr, secure)
 	if err != nil {
 		return err
 	}
-	mSubscribedServers.Set(combinedAddr, client)
+	s.subscribedServersClients.Set(combinedAddr, client)
 	s.sendData(combinedAddr, map[string]any{
 		"action": "new_node",
 		"addr":   LocalAddress,
@@ -43,19 +57,19 @@ func (s *Server) Subscribe(topic string, fn func(data map[string]any, ch Channel
 	if DEBUG {
 		klog.Printfs("grSubscribing to topic %s\n", topic)
 	}
-	return bus.Subscribe(topic, fn, name...)
+	return s.Bus.Subscribe(topic, fn, name...)
 }
 
 func (s *Server) Unsubscribe(topic string, ch Channel) {
 	if ch.Ch != nil {
-		bus.Unsubscribe(topic, ch)
+		s.Bus.Unsubscribe(topic, ch)
 	}
 }
 
 func (s *Server) Publish(topic string, data map[string]any) {
 	go func() {
 		s.publishWS(topic, data)
-		bus.Publish(topic, data)
+		s.Bus.Publish(topic, data)
 	}()
 }
 
@@ -63,7 +77,7 @@ func (s *Server) RemoveTopic(topic string) {
 	if DEBUG {
 		klog.Printfs("grRemoving topic %s\n", topic)
 	}
-	bus.RemoveTopic(topic)
+	s.Bus.RemoveTopic(topic)
 }
 
 func (s *Server) SendTo(name string, data map[string]any) {
@@ -74,9 +88,9 @@ func (s *Server) SendTo(name string, data map[string]any) {
 	go func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		bus.SendTo(name, data)
+		s.Bus.SendTo(name, data)
 	}()
-	go mWSName.Range(func(sub ClientSubscription, names []string) {
+	clientSubNames.Range(func(sub ClientSubscription, names []string) {
 		for _, n := range names {
 			if n == name {
 				s.mu.Lock()
@@ -100,7 +114,7 @@ func (s *Server) SendToServer(addr string, data map[string]any, secure ...bool) 
 		sch = "wss"
 	}
 	u := url.URL{Scheme: sch, Host: addr, Path: ServerPath}
-	conn, ok := mServersConnectionsSendToServer.Get(addr)
+	conn, ok := s.sendToServerConnections.Get(addr)
 	if !ok {
 		var err error
 		conn, _, err = ws.DefaultDialer.Dial(u.String(), nil)
@@ -127,7 +141,7 @@ func (s *Server) sendData(addr string, data map[string]any, secure ...bool) *ws.
 		sch = "wss"
 	}
 	u := url.URL{Scheme: sch, Host: addr, Path: ServerPath}
-	conn, ok := mServersConnectionsSendToServer.Get(addr)
+	conn, ok := s.sendToServerConnections.Get(addr)
 	if !ok {
 		var err error
 		conn, _, err = ws.DefaultDialer.Dial(u.String(), nil)

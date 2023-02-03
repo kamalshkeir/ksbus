@@ -15,7 +15,7 @@ It use [Kmux](https://github.com/kamalshkeir/kmux)
 ## Get Started
 
 ```sh
-go get github.com/kamalshkeir/ksbus@v0.9.5
+go get github.com/kamalshkeir/ksbus@v0.9.6
 ```
 
 ## You don't know where you can use it ?, here is a simple use case example:
@@ -31,7 +31,7 @@ go get github.com/kamalshkeir/ksbus@v0.9.5
 let bus = new Bus("localhost:9313");
 bus.autorestart=true;
 this.restartevery=5;
-bus.OnOpen = (e) => {
+bus.OnOpen = () => {
     let sub = bus.Subscribe("room-client",(data,subs) => {
         // show notification
 		...
@@ -341,7 +341,7 @@ def onOpen(bus):
     })
     # Subscribe, it also return the subscription
     bus.Subscribe("python", pythonTopicHandler)
-    # SendTo publish to named topic
+    # SendToNamed publish to named topic
     bus.SendToNamed("top:srv", {
         "data": "hello again from python"
     })

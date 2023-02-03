@@ -128,7 +128,7 @@ func (b *Bus) RemoveTopic(topic string) {
 	})
 }
 
-func (b *Bus) SendTo(name string, data map[string]any) {
+func (b *Bus) SendToNamed(name string, data map[string]any) {
 	data["name"] = name
 	b.channelsName.Range(func(key Channel, value []string) {
 		for _, v := range value {

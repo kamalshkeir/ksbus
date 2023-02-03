@@ -80,7 +80,7 @@ func (s *Server) RemoveTopic(topic string) {
 	s.Bus.RemoveTopic(topic)
 }
 
-func (s *Server) SendTo(name string, data map[string]any) {
+func (s *Server) SendToNamed(name string, data map[string]any) {
 	if DEBUG {
 		klog.Printfs("grSendTo: sending %v on %s \n", data, name)
 	}
@@ -88,7 +88,7 @@ func (s *Server) SendTo(name string, data map[string]any) {
 	go func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		s.Bus.SendTo(name, data)
+		s.Bus.SendToNamed(name, data)
 	}()
 	clientSubNames.Range(func(sub ClientSubscription, names []string) {
 		for _, n := range names {

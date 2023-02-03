@@ -320,9 +320,9 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 					if name, ok := m["name"]; ok {
 						if nn, ok := name.(string); ok {
 							if topic != "" {
-								server.SendTo(topic+":"+nn, mm)
+								server.SendToNamed(topic+":"+nn, mm)
 							} else {
-								server.SendTo(nn, mm)
+								server.SendToNamed(nn, mm)
 							}
 						}
 					} else {
@@ -333,9 +333,9 @@ func (server *Server) handleActions(m map[string]any, c *kmux.WsContext) {
 				case map[string]any:
 					if name, ok := m["name"]; ok {
 						if topic != "" {
-							server.SendTo(topic+":"+name.(string), v)
+							server.SendToNamed(topic+":"+name.(string), v)
 						} else {
-							server.SendTo(name.(string), v)
+							server.SendToNamed(name.(string), v)
 						}
 					} else {
 						c.Json(map[string]any{

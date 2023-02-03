@@ -203,7 +203,7 @@ func (client *Client) SendToNamed(name string, data map[string]any) {
 	}
 	err := client.Conn.WriteJSON(data)
 	if err != nil {
-		klog.Printfs("error SendTo, data: %v, err: %v\n", data, err)
+		klog.Printfs("error SendToNamed, data: %v, err: %v\n", data, err)
 		return
 	}
 }
@@ -212,7 +212,7 @@ func (client *Client) sendDataToServer(data map[string]any) {
 	data["id"] = client.Id
 	err := client.Conn.WriteJSON(data)
 	if err != nil {
-		fmt.Println("error SendTo, data:", data, ", err:", err)
+		fmt.Println("error SendToNamed, data:", data, ", err:", err)
 		return
 	}
 }

@@ -62,8 +62,8 @@ func (s *CombinedServer) Unsubscribe(topic string, ch Channel) {
 	}
 }
 
-func (s *CombinedServer) SendTo(name string, data map[string]any) {
-	s.Server.SendTo(name, data)
+func (s *CombinedServer) SendToNamed(name string, data map[string]any) {
+	s.Server.SendToNamed(name, data)
 }
 
 func (s *CombinedServer) Publish(topic string, data map[string]any) {
@@ -243,9 +243,9 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 						if nn, ok := name.(string); ok {
 							if topic != "" {
 								if _, ok := s.Server.localTopics.Get(topic + ":" + nn); ok {
-									s.Server.SendTo(topic+":"+nn, mm)
+									s.Server.SendToNamed(topic+":"+nn, mm)
 								} else if _, ok := s.Server.localTopics.Get(nn); ok {
-									s.Server.SendTo(topic+":"+nn, mm)
+									s.Server.SendToNamed(topic+":"+nn, mm)
 								} else {
 									s.serversTopics.Range(func(addr string, topics map[string]bool) {
 										if _, ok := topics[topic]; ok {
@@ -257,7 +257,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 								}
 							} else {
 								if _, ok := s.Server.localTopics.Get(nn); ok {
-									s.Server.SendTo(nn, mm)
+									s.Server.SendToNamed(nn, mm)
 								} else {
 									s.serversTopics.Range(func(addr string, topics map[string]bool) {
 										if _, ok := topics[topic]; ok {
@@ -278,9 +278,9 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 					if name, ok := m["name"]; ok {
 						if topic != "" {
 							if _, ok := s.Server.localTopics.Get(topic + ":" + name.(string)); ok {
-								s.Server.SendTo(topic+":"+name.(string), v)
+								s.Server.SendToNamed(topic+":"+name.(string), v)
 							} else if _, ok := s.Server.localTopics.Get(name.(string)); ok {
-								s.Server.SendTo(topic+":"+name.(string), v)
+								s.Server.SendToNamed(topic+":"+name.(string), v)
 							} else {
 								s.serversTopics.Range(func(addr string, topics map[string]bool) {
 									if _, ok := topics[topic+":"+name.(string)]; ok {
@@ -292,9 +292,9 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 							}
 						} else {
 							if _, ok := s.Server.localTopics.Get(name.(string)); ok {
-								s.Server.SendTo(name.(string), v)
+								s.Server.SendToNamed(name.(string), v)
 							} else if _, ok := s.Server.localTopics.Get(name.(string)); ok {
-								s.Server.SendTo(name.(string), v)
+								s.Server.SendToNamed(name.(string), v)
 							} else {
 								s.serversTopics.Range(func(addr string, topics map[string]bool) {
 									if _, ok := topics[name.(string)]; ok {

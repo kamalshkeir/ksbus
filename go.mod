@@ -1,6 +1,6 @@
 module github.com/kamalshkeir/ksbus
 
-go 1.19
+go 1.20
 
 require (
 	github.com/kamalshkeir/klog v1.0.0

@@ -92,7 +92,13 @@ func (client *Client) handle() {
 	client.handleData(func(data map[string]any, sub *ClientSubscription) {
 		v1, okTopic := data["topic"]
 		v2, okName := data["name"]
-
+		eventId, okEvent := data["event_id"]
+		if okEvent {
+			client.Publish(eventId.(string), map[string]any{
+				"success": "got the event",
+				"id":      client.Id,
+			})
+		}
 		found := false
 		if okTopic && okName {
 			if fn, ok := client.topicHandlers.Get(v1.(string) + ":" + v2.(string)); ok {

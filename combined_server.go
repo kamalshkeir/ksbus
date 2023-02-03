@@ -56,10 +56,8 @@ func (s *CombinedServer) Subscribe(topic string, fn func(data map[string]any, ch
 	return s.Server.Subscribe(topic, fn, name...)
 }
 
-func (s *CombinedServer) Unsubscribe(topic string, ch Channel) {
-	if ch.Ch != nil {
-		s.Server.Unsubscribe(topic, ch)
-	}
+func (s *CombinedServer) Unsubscribe(ch Channel) {
+	s.Server.Unsubscribe(ch)
 }
 
 func (s *CombinedServer) SendToNamed(name string, data map[string]any) {

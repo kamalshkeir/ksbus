@@ -71,48 +71,64 @@ func (b *Bus) Subscribe(topic string, fn func(data map[string]any, ch Channel), 
 	return ch
 }
 
-func (b *Bus) Unsubscribe(topic string, ch Channel) {
+func (b *Bus) Unsubscribe(ch Channel) {
 	// add sub
-	if subs, found := ch.Bus.subscribers.Get(topic); found {
+	if subs, found := ch.Bus.subscribers.Get(ch.Topic); found {
 		for i, sub := range subs {
 			if sub == ch {
 				subs = append(subs[:i], subs[i+1:]...)
-				ch.Bus.subscribers.Set(topic, subs)
-				close(ch.Ch)
 			}
 		}
+		b.mu.Lock()
+		b.subscribers.Set(ch.Topic, subs)
+		b.mu.Unlock()
 	}
 	b.channelsName.Delete(ch)
+	close(ch.Ch)
 }
 
 func (b *Bus) UnsubscribeId(topic, id string) {
 	// add sub
+	chns := Channel{}
 	if subs, found := b.subscribers.Get(topic); found {
 		for i, sub := range subs {
-			if sub.Id == id {
+			if sub.Id == id && sub.Topic == topic {
+				chns = sub
 				subs = append(subs[:i], subs[i+1:]...)
-				b.subscribers.Set(topic, subs)
-				close(sub.Ch)
 			}
 		}
+		b.mu.Lock()
+		b.subscribers.Set(topic, subs)
+		b.mu.Unlock()
 	}
 	b.channelsName.Range(func(key Channel, value []string) {
 		if key.Id == id {
-			go b.channelsName.Delete(key)
+			b.channelsName.Delete(key)
 		}
 	})
+	close(chns.Ch)
 }
 
 func (b *Bus) Publish(topic string, data map[string]any) {
 	data["topic"] = topic
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	if chans, found := b.subscribers.Get(topic); found {
 		channels := append([]Channel{}, chans...)
-		go func(data map[string]any, subs []Channel) {
-			for _, ch := range subs {
-				ch.Ch <- data
-			}
-		}(data, channels)
+		for _, ch := range channels {
+			ch.Ch <- data
+		}
 	}
+}
+
+func (b *Bus) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, ch Channel)) {
+	data["topic"] = topic
+	eventId := GenerateRandomString(12)
+	data["event_id"] = eventId
+	b.Publish(topic, data)
+	b.Subscribe(eventId, func(data map[string]any, ch Channel) {
+		onRecv(data, ch)
+	})
 }
 
 func (b *Bus) RemoveTopic(topic string) {
@@ -130,6 +146,8 @@ func (b *Bus) RemoveTopic(topic string) {
 
 func (b *Bus) SendToNamed(name string, data map[string]any) {
 	data["name"] = name
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.channelsName.Range(func(key Channel, value []string) {
 		for _, v := range value {
 			if v == name {

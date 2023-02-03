@@ -3,6 +3,7 @@ package ksbus
 import (
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
@@ -60,9 +61,9 @@ func (s *Server) Subscribe(topic string, fn func(data map[string]any, ch Channel
 	return s.Bus.Subscribe(topic, fn, name...)
 }
 
-func (s *Server) Unsubscribe(topic string, ch Channel) {
+func (s *Server) Unsubscribe(ch Channel) {
 	if ch.Ch != nil {
-		s.Bus.Unsubscribe(topic, ch)
+		s.Bus.Unsubscribe(ch)
 	}
 }
 
@@ -71,6 +72,27 @@ func (s *Server) Publish(topic string, data map[string]any) {
 		s.publishWS(topic, data)
 		s.Bus.Publish(topic, data)
 	}()
+}
+
+func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, ch Channel)) {
+	data["topic"] = topic
+	eventId := GenerateRandomString(12)
+	data["event_id"] = eventId
+	done := make(chan struct{})
+	s.Publish(topic, data)
+	s.Subscribe(eventId, func(data map[string]any, ch Channel) {
+		done <- struct{}{}
+		onRecv(data, ch)
+	})
+free:
+	for {
+		select {
+		case <-done:
+			break free
+		case <-time.After(500 * time.Millisecond):
+			break free
+		}
+	}
 }
 
 func (s *Server) RemoveTopic(topic string) {

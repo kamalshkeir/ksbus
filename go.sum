@@ -4,6 +4,8 @@ github.com/kamalshkeir/kmap v1.1.1 h1:4jffO6jaiAhT1C6pBpcyfXD6ag2TyPbNCmhuiwMLQ7
 github.com/kamalshkeir/kmap v1.1.1/go.mod h1:SLSllMqrhSTJtgYd14nXeFZ/shp9AY4t20YGCtlcziI=
 github.com/kamalshkeir/kmux v1.6.9 h1:AyBKFbgcuLMkvUSFCT6S/DbGEHiG8tIDUqDPlGszUbo=
 github.com/kamalshkeir/kmux v1.6.9/go.mod h1:IfSWZi4dOvTx5PpfNSYFFweUE4uh52n3n7yF6Qus2pE=
+github.com/kamalshkeir/kmux v1.7.0 h1:eC1Gpdr0DTULERBFjL9TP8wdXhEN/8CKn4J47ARszWE=
+github.com/kamalshkeir/kmux v1.7.0/go.mod h1:IfSWZi4dOvTx5PpfNSYFFweUE4uh52n3n7yF6Qus2pE=
 golang.org/x/crypto v0.5.0 h1:U/0M97KRkSFvyD/3FSmdP5W5swImpNgle/EHFhOsQPE=
 golang.org/x/crypto v0.5.0/go.mod h1:NK/OQwhpMQP3MwtdjgLlYHnH9ebylxKWv3e0fK+mkQU=
 golang.org/x/net v0.5.0 h1:GyT4nK/YDHSqa1c4753ouYCDajOYKTja9Xb/OHtgvSw=

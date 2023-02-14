@@ -1,6 +1,7 @@
 package ksbus
 
 import (
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -28,6 +29,9 @@ func NewServer(bus ...*Bus) *Server {
 		b = New()
 	}
 	app := kmux.New()
+	if GzipEnabled {
+		app.Use(kmux.Gzip())
+	}
 	server := Server{
 		Bus:                      b,
 		App:                      app,
@@ -36,6 +40,14 @@ func NewServer(bus ...*Bus) *Server {
 		localTopics:              kmap.New[string, bool](false),
 	}
 	return &server
+}
+
+func (s *Server) WithPprof(path ...string) {
+	s.App.WithPprof(path...)
+}
+
+func (s *Server) WithMetrics(httpHandler http.Handler, path ...string) {
+	s.App.WithMetrics(httpHandler, path...)
 }
 
 func (s *Server) JoinCombinedServer(combinedAddr string, secure bool) error {

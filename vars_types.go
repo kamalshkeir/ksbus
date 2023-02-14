@@ -14,6 +14,7 @@ var (
 	CLIENT_SECURE  = false
 	ServerPath     = "/ws/bus"
 	LocalAddress   = ""
+	GzipEnabled    = true
 	clientSubNames = kmap.New[ClientSubscription, []string](false)
 	BeforeDataWS   = func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool {
 		return true

@@ -15,7 +15,7 @@ It use [Kmux](https://github.com/kamalshkeir/kmux)
 ## Get Started
 
 ```sh
-go get github.com/kamalshkeir/ksbus@v1.0.0
+go get github.com/kamalshkeir/ksbus@v1.0.1
 ```
 
 ## You don't know where you can use it ?, here is a simple use case example:
@@ -139,8 +139,12 @@ func (subscribtion *ClientSubscription) Unsubscribe() (*ClientSubscription)
 ##### Example
 ```go
 func main() {
-	client,_ := ksbus.NewClient("localhost:9313",false)
-
+	client:= ksbus.NewClient()
+	client.AutoRestart = true
+	err := client.Connect("localhost:9313",false)
+	if klog.CheckError(err){
+		return
+	}
     // if you specify a name 'go' to this subscription like below, you will receive data from any Publish on topic 'topic1' AND any SendToNamed on 'topic1:go' name, so SendToNamed allow you to send not for all listeners on the topic, but the unique named one 'topic1:go'
 	client.Subscribe("topic1",func(data map[string]any, unsub *ksbus.ClientSubscription) {
 		fmt.Println("client recv",data)

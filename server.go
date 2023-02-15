@@ -29,9 +29,6 @@ func NewServer(bus ...*Bus) *Server {
 		b = New()
 	}
 	app := kmux.New()
-	if GzipEnabled {
-		app.Use(kmux.Gzip())
-	}
 	server := Server{
 		Bus:                      b,
 		App:                      app,

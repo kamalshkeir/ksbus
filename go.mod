@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/kamalshkeir/klog v1.0.0
 	github.com/kamalshkeir/kmap v1.1.1
-	github.com/kamalshkeir/kmux v1.8.4
+	github.com/kamalshkeir/kmux v1.8.7
 )
 
 require (

@@ -77,10 +77,8 @@ func (s *Server) Unsubscribe(ch Channel) {
 }
 
 func (s *Server) Publish(topic string, data map[string]any) {
-	go func() {
-		s.publishWS(topic, data)
-		s.Bus.Publish(topic, data)
-	}()
+	s.Bus.Publish(topic, data)
+	s.publishWS(topic, data)
 }
 
 func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, ch Channel)) {
@@ -116,11 +114,7 @@ func (s *Server) SendToNamed(name string, data map[string]any) {
 		klog.Printfs("grSendTo: sending %v on %s \n", data, name)
 	}
 	data["name"] = name
-	go func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		s.Bus.SendToNamed(name, data)
-	}()
+	s.Bus.SendToNamed(name, data)
 	clientSubNames.Range(func(sub ClientSubscription, names []string) {
 		for _, n := range names {
 			if n == name {

@@ -90,7 +90,7 @@ func (s *CombinedServer) RunAutoTLS(subDomains ...string) {
 
 func (s *CombinedServer) handleWS(addr string) {
 	ws.FuncBeforeUpgradeWS = BeforeUpgradeWS
-	s.Server.App.WS(ServerPath, func(c *kmux.WsContext) {
+	s.Server.App.Ws(ServerPath, func(c *kmux.WsContext) {
 		for {
 			m, err := c.ReceiveJson()
 			if err != nil || !BeforeDataWS(m, c.Ws, c.Request) {

@@ -145,7 +145,7 @@ func (server *Server) AllTopics() []string {
 
 func (server *Server) handleWS(addr string) {
 	ws.FuncBeforeUpgradeWS = BeforeUpgradeWS
-	server.App.WS(ServerPath, func(c *kmux.WsContext) {
+	server.App.Ws(ServerPath, func(c *kmux.WsContext) {
 		for {
 			m, err := c.ReceiveJson()
 			if err != nil || !BeforeDataWS(m, c.Ws, c.Request) {

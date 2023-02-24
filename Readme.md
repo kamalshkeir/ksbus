@@ -329,37 +329,63 @@ BeforeServersData = func(data any,conn *ws.Conn) {
 
 ## Example Python Client
 ```sh
-pip install ksbus==1.2.0
+pip install ksbus==1.2.1
 ```
+
+With FastApi example:
+```py
+from typing import Union
+
+from fastapi import FastAPI
+# ksbus import
+from ksbus import Bus
+from pydantic import BaseSettings
+
+
+class Settings(BaseSettings):
+    bus: Bus = None
+
+settings= Settings()
+app = FastAPI()
+
+
+def initBus():
+    Bus("localhost:9313", onOpen=onOpen)
+
+def onOpen(bus):
+    print("connected")
+    settings.bus=bus
+    print(settings.bus)
+    bus.Publish("server",{
+        "data":"hi i am python"
+    })
+    bus.Subscribe("client",lambda data,subs : print(data))
+
+
+
+@app.get("/")
+async def read_root():
+    if settings.bus == None:
+        initBus()
+    return {"Hello": "World"}
+
+
+@app.get("/items/{item_id}")
+async def read_item(item_id: int, q: Union[str, None] = None):
+    return {"item_id": item_id, "q": q}
+```
+
+Pure Python example
+
 ```py
 from ksbus import Bus
 
-
-# onOpen callback that let you know when connection is ready, it take the bus as param
-def onOpen(bus):
-    print("connected")
-    # bus.autorestart=True
-    # Publish publish to topic
-    bus.Publish("top", {
-        "data": "hello from python"
+def OnOpen(bus):
+    print("connected",bus)
+    bus.Publish("server",{
+        "data":"hi from pure python"
     })
-    # Subscribe, it also return the subscription
-    bus.Subscribe("python", pythonTopicHandler)
-    # SendToNamed publish to named topic
-    bus.SendToNamed("top:srv", {
-        "data": "hello again from python"
-    })
-    # bus.Unsubscribe("python")
-    print("finish everything")
 
-
-# pythonTopicHandler handle topic 'python'
-def pythonTopicHandler(data, subs):
-    print("recv on topic python:", data)
-    # Unsubscribe
-    #subs.Unsubscribe()
-
-if __name__ == "__main__":
-    Bus("localhost:9313", onOpen=onOpen) # blocking
-    print("prorgram exited")
+if __name__ == '__main__':
+    Bus("localhost:9313",block=True,onOpen=OnOpen)
 ```

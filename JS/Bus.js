@@ -20,7 +20,7 @@ class Bus {
         $this.conn = new WebSocket(path);
         $this.conn.binaryType = 'arraybuffer';
         $this.conn.onopen = (e) => {
-            console.log("connected to "+path);
+            console.log("connected");
             $this.conn.send(JSON.stringify({
                 "action":"ping",
                 "id":$this.id

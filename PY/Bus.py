@@ -15,7 +15,7 @@ import websockets
 
 
 class Bus:
-    def __init__(self, addr, path="/ws/bus", secure=False, onOpen = lambda bus:None):
+    def __init__(self, addr,block=False, path="/ws/bus", secure=False, onOpen = lambda bus:None):
         self.scheme = "ws://"
         if secure:
             self.scheme = "wss://"
@@ -33,7 +33,10 @@ class Bus:
         self.on_close = lambda: None
         self.id = self.makeid(8)
         try:
-            asyncio.get_event_loop().run_until_complete(self.connect(self.path))
+            if block :
+                asyncio.get_event_loop().run_until_complete(self.connect(self.path))
+            else:
+                asyncio.create_task(self.connect(self.path))
         except Exception as e:
             print(e)
     

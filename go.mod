@@ -5,11 +5,10 @@ go 1.20
 require (
 	github.com/kamalshkeir/klog v1.0.0
 	github.com/kamalshkeir/kmap v1.1.2
-	github.com/kamalshkeir/kmux v1.11.3
+	github.com/kamalshkeir/kmux v1.11.4
 )
 
 require (
-	github.com/kamalshkeir/kstrct v1.5.7 // indirect
 	golang.org/x/crypto v0.8.0 // indirect
 	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/text v0.9.0 // indirect

@@ -1,5 +1,5 @@
 class Bus {
-    constructor(addr,path="/ws/bus",secure=false) {
+    constructor(addr=window.location.host,path="/ws/bus",secure=false) {
         this.scheme="ws://";
         if (secure) {
             this.scheme="wss://"
@@ -11,7 +11,7 @@ class Bus {
         this.restartevery=10;
         this.OnOpen=() =>{};
         this.OnData=(data) =>{};
-        this.id=this.makeid(12);
+        this.id=this.makeid(8);
         this.conn=this.connect(this.path,this.callback);
     }
 
@@ -33,26 +33,20 @@ class Bus {
             let obj = JSON.parse(e.data);
             $this.subscription={};
             $this.OnData(obj);
-            if ("event_id" in obj) {
-                $this.Publish(obj.event_id,{
-                    "success":"got the event",
-                    "id":$this.id
-                })
-            }
-            if ("topic" in obj) {
+            if (obj.topic !== undefined) {
                 // on publish
                 if($this.TopicHandlers[obj.topic] !== undefined) {
                     let subs;
-                    if ("name" in obj) {
+                    if (obj.name !== undefined) {
                         subs = new busSubscription($this,obj.topic,obj.name);
                     } else {
                         subs = new busSubscription($this,obj.topic);
                     }
                     $this.TopicHandlers[obj.topic](obj,subs);          
                     return;
-                } else if("name" in obj && (obj.topic+":"+obj.name in $this.TopicHandlers)) {
+                } else if(obj.name !== undefined && $this.TopicHandlers[obj.topic+":"+obj.name] !== undefined) {
                     let subs;
-                    if ("name" in obj) {
+                    if (obj.name !== undefined) {
                         subs = new busSubscription($this,"",obj.topic+":"+obj.name);
                     } else {
                         subs = new busSubscription($this,obj.topic);
@@ -62,7 +56,7 @@ class Bus {
                 } else {
                     console.log("topicHandler not found for topic:",obj.topic,obj.name,$this.TopicHandlers);
                 }
-            } else if ("name" in obj) {
+            } else if (obj.name !== undefined) {
                 // on sendTo
                 let top;
                 let nam;
@@ -76,11 +70,11 @@ class Bus {
                     }
                     nam=obj.name
                 }
-                if(nam in $this.TopicHandlers) {
+                if($this.TopicHandlers[nam] !== undefined) {
                     let subs= new busSubscription($this,top,nam);
                     $this.TopicHandlers[obj.name](obj,subs)               
                     return;
-                } else if(top+":"+nam in $this.TopicHandlers) {
+                } else if($this.TopicHandlers[top+":"+nam] !== undefined) {
                     let subs= new busSubscription($this,top,nam);
                     $this.TopicHandlers[top+":"+nam](obj,subs)               
                     return;
@@ -204,5 +198,4 @@ class busSubscription {
     Unsubscribe() {
         this.parent.Unsubscribe(this.topic,this.name);
     }
-
 }

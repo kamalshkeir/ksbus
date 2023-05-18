@@ -1,4 +1,10 @@
 class Bus {
+    /**
+     * Bus can be initialized without any param 'let bus = new Bus()'
+     * @param {string} addr "default: window.location.host"
+     * @param {string} path "default: /ws/bus"
+     * @param {boolean} secure "default: false"
+     */
     constructor(addr=window.location.host,path="/ws/bus",secure=false) {
         this.scheme="ws://";
         if (secure) {
@@ -6,6 +12,7 @@ class Bus {
         }
         this.path=path
         this.path=this.scheme+addr+this.path;
+        this.Address=this.path;
         this.TopicHandlers={};
         this.autorestart=false;
         this.restartevery=10;
@@ -20,7 +27,7 @@ class Bus {
         $this.conn = new WebSocket(path);
         $this.conn.binaryType = 'arraybuffer';
         $this.conn.onopen = (e) => {
-            console.log("connected");
+            console.log("Bus Connected");
             $this.conn.send(JSON.stringify({
                 "action":"ping",
                 "id":$this.id
@@ -33,6 +40,12 @@ class Bus {
             let obj = JSON.parse(e.data);
             $this.subscription={};
             $this.OnData(obj);
+            if (obj.event_id !== undefined) {
+                $this.Publish(obj.event_id,{
+                    "success":"got the event",
+                    "id":$this.id
+                })
+            }
             if (obj.topic !== undefined) {
                 // on publish
                 if($this.TopicHandlers[obj.topic] !== undefined) {
@@ -102,6 +115,13 @@ class Bus {
         return $this.conn;
     }
 
+    /**
+     * Subscribe subscribe to a topic with optional name
+     * @param {string} topic 
+     * @param {function handler(data: string,subscription: busSubscription) {}} handler 
+     * @param {string} name 
+     * @returns 
+     */
     Subscribe(topic,handler,name="") {
         if (name !== "") {
             this.conn.send(JSON.stringify({
@@ -125,6 +145,11 @@ class Bus {
         return subs;
     }
 
+    /**
+     * Unsubscribe unsubscribe from topic, name is optional
+     * @param {string} topic 
+     * @param {string} name 
+     */
     Unsubscribe(topic,name="") {
         let data = {
             "action":"unsub",
@@ -143,6 +168,11 @@ class Bus {
         }
     }
 
+    /**
+     * Publish publish to topic
+     * @param {string} topic 
+     * @param {object} data 
+     */
     Publish(topic,data) {
         this.conn.send(JSON.stringify({
             "action":"pub",
@@ -152,6 +182,12 @@ class Bus {
         }));
     }
 
+    /**
+     * SendToNamed send to a named topic name must be like 'client:go'
+     * @param {string} name 
+     * @param {object} data 
+     * @param {string} topic 
+     */
     SendToNamed(name,data,topic="") {
         let toSenddata = {
             "action":"send",
@@ -165,6 +201,11 @@ class Bus {
         this.conn.send(JSON.stringify(toSenddata)); 
     } 
     
+    /**
+     * RemoveTopic remove a topic completely from the server bus
+     * @param {string} topic 
+     * @returns 
+     */
     RemoveTopic(topic) {
         if(topic !== "") {
             this.conn.send(JSON.stringify({
@@ -189,12 +230,18 @@ class Bus {
     }
 }
 
+/**
+ * busSubscription is a class with one method allowing unsubscribing from a topic without the need of arguments like topic name
+ */
 class busSubscription {
     constructor(cl,topic,name="") {
         this.topic=topic;
         this.name=name;
         this.parent=cl;
     }
+    /**
+     * Unsubscribe take no params, unsubscribe from the topic
+     */
     Unsubscribe() {
         this.parent.Unsubscribe(this.topic,this.name);
     }

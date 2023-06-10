@@ -83,9 +83,9 @@ func (s *CombinedServer) RunTLS(cert string, certKey string) {
 	s.Server.App.RunTLS(LocalAddress, cert, certKey)
 }
 
-func (s *CombinedServer) RunAutoTLS(subDomains ...string) {
+func (s *CombinedServer) RunAutoTLS() {
 	s.handleWS(LocalAddress)
-	s.Server.App.RunAutoTLS(LocalAddress, subDomains...)
+	s.Server.App.RunAutoTLS(LocalAddress)
 }
 
 func (s *CombinedServer) handleWS(addr string) {

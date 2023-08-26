@@ -198,5 +198,5 @@ func (s *Server) RunTLS(addr string, cert string, certKey string) {
 func (s *Server) RunAutoTLS(domainName string, subDomains ...string) {
 	LocalAddress = domainName
 	s.handleWS(domainName)
-	s.App.RunAutoTLS(domainName)
+	s.App.RunAutoTLS(domainName, subDomains...)
 }

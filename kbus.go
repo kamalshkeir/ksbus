@@ -111,13 +111,13 @@ func (b *Bus) UnsubscribeId(topic, id string) {
 
 func (b *Bus) Publish(topic string, data map[string]any) {
 	data["topic"] = topic
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	if chans, found := b.subscribers.Get(topic); found {
 		channels := append([]Channel{}, chans...)
-		for _, ch := range channels {
-			ch.Ch <- data
-		}
+		go func() {
+			for _, ch := range channels {
+				ch.Ch <- data
+			}
+		}()
 	}
 }
 

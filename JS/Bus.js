@@ -5,14 +5,15 @@ class Bus {
      * @param {string} path "default: /ws/bus"
      * @param {boolean} secure "default: false"
      */
-    constructor(addr=window.location.host,path="/ws/bus",secure=false) {
-        this.scheme="ws://";
-        if (secure) {
+    constructor(options) {
+        this.addr=options.addr || window.location.host;
+        this.path=options.path || "/ws/bus";
+        this.scheme=options.scheme || "ws://";
+        this.secure=options.secure || false;
+        if (this.secure) {
             this.scheme="wss://"
         }
-        this.path=path
-        this.path=this.scheme+addr+this.path;
-        this.Address=this.path;
+        this.fullAddress=this.scheme+this.addr+this.path;
         this.TopicHandlers={};
         this.autorestart=false;
         this.restartevery=10;
@@ -20,7 +21,7 @@ class Bus {
         this.OnClose=() =>{};
         this.OnData=(data) =>{};
         this.id=this.makeid(8);
-        this.conn=this.connect(this.path,this.callback);
+        this.conn=this.connect(this.fullAddress,this.callback);
     }
 
     connect(path,callbackOnData) {

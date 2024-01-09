@@ -7,7 +7,7 @@ toolchain go1.21.0
 require (
 	github.com/kamalshkeir/klog v1.1.4
 	github.com/kamalshkeir/kmap v1.1.2
-	github.com/kamalshkeir/kmux v1.91.93
+	github.com/kamalshkeir/kmux v1.91.94
 )
 
 require (

@@ -7,12 +7,13 @@
 //  4. JS Client Bus
 //  5. Golang Client Bus
 //
-// This package use [Kmux] wich is the same router as [Kago]
+// This package use [Kmux] wich is the same router as [Korm]
 //
 // # KSbus can be used between your go servers, and between your servers and client using the built in JS library
 //
-// [Kago]: https://github.com/kamalshkeir/kago
-// [Kmux]: https://github.com/kamalshkeir/kmux
+// [Korm]: https://github.com/kamalshkeir/korm
+//
+// [Ksmux]: https://github.com/kamalshkeir/ksmux
 package ksbus
 
 import (

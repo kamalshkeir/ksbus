@@ -5,8 +5,8 @@ import (
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
-	"github.com/kamalshkeir/kmux"
-	"github.com/kamalshkeir/kmux/ws"
+	"github.com/kamalshkeir/ksmux"
+	"github.com/kamalshkeir/ksmux/ws"
 )
 
 type CombinedServer struct {
@@ -90,11 +90,16 @@ func (s *CombinedServer) RunAutoTLS() {
 
 func (s *CombinedServer) handleWS(addr string) {
 	ws.FuncBeforeUpgradeWS = BeforeUpgradeWS
-	s.Server.App.Ws(ServerPath, func(c *kmux.WsContext) {
+	s.Server.App.Get(ServerPath, func(c *ksmux.Context) {
+		conn, err := ksmux.UpgradeConnection(c.ResponseWriter, c.Request, nil)
+		if klog.CheckError(err) {
+			return
+		}
 		for {
-			m, err := c.ReceiveJson()
-			if err != nil || !BeforeDataWS(m, c.Ws, c.Request) {
-				s.Server.removeWS(c.Ws)
+			var m map[string]any
+			err := conn.ReadJSON(&m)
+			if err != nil || !BeforeDataWS(m, conn, c.Request) {
+				s.Server.removeWS(conn)
 				break
 			}
 
@@ -103,12 +108,12 @@ func (s *CombinedServer) handleWS(addr string) {
 				klog.Printfs("yl%v\n", m)
 			}
 
-			go s.handleActions(m, c)
+			go s.handleActions(m, conn)
 		}
 	})
 }
 
-func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
+func (s *CombinedServer) handleActions(m map[string]any, conn *ws.Conn) {
 	publisher := ""
 	if publisherAddr, ok := m["from_publisher"]; ok {
 		if pubAddr, ok := publisherAddr.(string); ok {
@@ -137,7 +142,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 					if tpc, ok := m["topic"]; ok {
 						s.Server.Publish(tpc.(string), mm)
 					} else {
-						c.Json(map[string]any{
+						_ = conn.WriteJSON(map[string]any{
 							"error": "topic missing",
 						})
 					}
@@ -145,12 +150,12 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 					if topic, ok := m["topic"]; ok {
 						s.Server.Publish(topic.(string), v)
 					} else {
-						c.Json(map[string]any{
+						_ = conn.WriteJSON(map[string]any{
 							"error": "topic missing",
 						})
 					}
 				default:
-					c.Json(map[string]any{
+					_ = conn.WriteJSON(map[string]any{
 						"error": "type not handled, only json accepted",
 					})
 				}
@@ -160,7 +165,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 				if topicString, ok := topic.(string); ok {
 					if id, ok := m["id"]; ok {
 						s.Server.Bus.mu.Lock()
-						s.Server.addWS(id.(string), topicString, c.Ws)
+						s.Server.addWS(id.(string), topicString, conn)
 						s.Server.Bus.mu.Unlock()
 					} else {
 						fmt.Println("id not found, will not be added:", m)
@@ -169,7 +174,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 
 					if v, ok := m["name"]; ok {
 						if id, ok := m["id"]; ok {
-							addNamedWS(topicString, v.(string), id.(string), c.Ws)
+							addNamedWS(topicString, v.(string), id.(string), conn)
 						} else {
 							fmt.Println("id not found, will not be added:", m)
 						}
@@ -177,7 +182,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 					}
 				}
 			} else {
-				c.Json(map[string]any{
+				_ = conn.WriteJSON(map[string]any{
 					"error": "topic missing",
 				})
 			}
@@ -185,7 +190,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 			if topc, ok := m["topic"]; ok {
 				if topic, ok := topc.(string); ok {
 					if id, ok := m["id"]; ok {
-						s.Server.unsubscribeWS(id.(string), topic, c.Ws)
+						s.Server.unsubscribeWS(id.(string), topic, conn)
 					} else {
 						fmt.Println("id not found, will not be removed:", m)
 					}
@@ -207,7 +212,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 					}
 				}
 			} else {
-				c.Json(map[string]any{
+				_ = conn.WriteJSON(map[string]any{
 					"error": "topic missing",
 				})
 			}
@@ -222,7 +227,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 					}
 				})
 			} else {
-				c.Json(map[string]any{
+				_ = conn.WriteJSON(map[string]any{
 					"error": "topic missing",
 				})
 			}
@@ -268,7 +273,7 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 							}
 						}
 					} else {
-						c.Json(map[string]any{
+						_ = conn.WriteJSON(map[string]any{
 							"error": "name missing",
 						})
 					}
@@ -304,12 +309,12 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 							}
 						}
 					} else {
-						c.Json(map[string]any{
+						_ = conn.WriteJSON(map[string]any{
 							"error": "name missing",
 						})
 					}
 				default:
-					c.Json(map[string]any{
+					_ = conn.WriteJSON(map[string]any{
 						"error": "type not handled, only json or object stringified",
 					})
 				}
@@ -355,15 +360,15 @@ func (s *CombinedServer) handleActions(m map[string]any, c *kmux.WsContext) {
 		case "server_message", "serverMessage":
 			if data, ok := m["data"]; ok {
 				if addr, ok := m["addr"]; ok && addr.(string) == LocalAddress {
-					BeforeServersData(data, c.Ws)
+					BeforeServersData(data, conn)
 				}
 			}
 		case "ping":
-			_ = c.Json(map[string]any{
+			_ = conn.WriteJSON(map[string]any{
 				"data": "pong",
 			})
 		default:
-			_ = c.Json(map[string]any{
+			_ = conn.WriteJSON(map[string]any{
 				"error": "action " + action.(string) + " not handled",
 			})
 		}

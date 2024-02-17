@@ -11,7 +11,7 @@ import (
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
-	"github.com/kamalshkeir/kmux/ws"
+	"github.com/kamalshkeir/ksmux/ws"
 )
 
 type Client struct {

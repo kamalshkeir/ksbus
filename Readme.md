@@ -1,5 +1,5 @@
 ### KSbus is a zero configuration Eventbus written in Golang, it offer an easy way to share/synchronise data between your Golang servers or between you servers and browsers(JS client) , or simply between your GO and JS clients or with Python. 
-It use [Kmux](https://github.com/kamalshkeir/kmux)
+It use [Ksmux](https://github.com/kamalshkeir/ksmux)
 # What's New:
 - [Python client](#example-python-client) `pip install ksbus`
 - JoinCombinedServer, allow you to join a combined server, first you create a server, then you join the combined [See More](#server-bus-use-the-internal-bus-and-a-websocket-server)
@@ -7,7 +7,7 @@ It use [Kmux](https://github.com/kamalshkeir/kmux)
 
 ### Any Go App can communicate with another Go Server or another Go Client. 
 
-### JS client is written in Pure JS, you can server it using kmux, and link it in your html page
+### JS client is written in Pure JS, you can server it using ksmux, and link it in your html page
 
 ### KSbus also handle distributed use cases using a CombinedServer
 
@@ -99,7 +99,7 @@ func main() {
 	bus.App.LocalTemplates("tempss") // load template folder to be used with c.HTML
 	bus.App.LocalStatics("assets","/assets/")
 	
-	bus.App.GET("/",func(c *kmux.Context) {
+	bus.App.GET("/",func(c *ksmux.Context) {
 		c.Html("index.html",nil)
 	})
 
@@ -109,7 +109,7 @@ func main() {
 	},"go")
 
 	
-	bus.App.GET("/pp",func(c *kmux.Context) {
+	bus.App.GET("/pp",func(c *ksmux.Context) {
 		bus.Publish("client",map[string]any{
 			"msg":"hello from server",
 		})
@@ -245,7 +245,7 @@ func main() {
 	bus.App.LocalTemplates("../../tempss")
 	bus.App.LocalStatics("../../assets","/assets/")
 	addr := "localhost:9313"
-	bus.App.GET("/",func(c *kmux.Context) {
+	bus.App.GET("/",func(c *ksmux.Context) {
 		c.Html("index.html",map[string]any{
 			"addr":addr,
 		})
@@ -271,7 +271,7 @@ func main() {
 	bus.App.LocalTemplates("../../tempss")
 	bus.App.LocalStatics("../../assets","/assets/")
 	addr := "localhost:9314"
-	bus.App.GET("/",func(c *kmux.Context) {
+	bus.App.GET("/",func(c *ksmux.Context) {
 		c.Html("index.html",map[string]any{
 			"addr":addr,
 		})

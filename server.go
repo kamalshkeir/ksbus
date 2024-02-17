@@ -8,13 +8,13 @@ import (
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
-	"github.com/kamalshkeir/kmux"
-	"github.com/kamalshkeir/kmux/ws"
+	"github.com/kamalshkeir/ksmux"
+	"github.com/kamalshkeir/ksmux/ws"
 )
 
 type Server struct {
 	Bus                      *Bus
-	App                      *kmux.Router
+	App                      *ksmux.Router
 	sendToServerConnections  *kmap.SafeMap[string, *ws.Conn]
 	subscribedServersClients *kmap.SafeMap[string, *Client]
 	localTopics              *kmap.SafeMap[string, bool]
@@ -28,7 +28,7 @@ func NewServer(bus ...*Bus) *Server {
 	} else {
 		b = New()
 	}
-	app := kmux.New()
+	app := ksmux.New()
 	server := Server{
 		Bus:                      b,
 		App:                      app,

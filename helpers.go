@@ -1,16 +1,11 @@
 package ksbus
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/ksmux/ws"
-)
-
-var (
-	keepServing = false
 )
 
 func (s *Server) publishWS(topic string, data map[string]any) {
@@ -24,11 +19,29 @@ func (s *Server) publishWS(topic string, data map[string]any) {
 	}
 }
 
+func (s *Server) publishWSToID(id string, data map[string]any) {
+	s.Bus.mu.Lock()
+	defer s.Bus.mu.Unlock()
+	data["id"] = id
+	s.Bus.wsSubscribers.Range(func(_ string, value []ClientSubscription) {
+		for i := range value {
+			if value[i].Id == id {
+				_ = value[i].Conn.WriteJSON(data)
+				return
+			}
+		}
+	})
+}
+
 func (s *Server) addWS(id, topic string, conn *ws.Conn) {
 	wsSubscribers := s.Bus.wsSubscribers
 	new := ClientSubscription{
-		Id:   GenerateRandomString(5),
-		Conn: conn,
+		Conn:  conn,
+		Id:    id,
+		Topic: topic,
+	}
+	if id == "" {
+		GenerateRandomString(5)
 	}
 
 	clients, ok := wsSubscribers.Get(topic)
@@ -54,45 +67,13 @@ func (s *Server) addWS(id, topic string, conn *ws.Conn) {
 	}
 }
 
-func addNamedWS(topic, name, id string, conn *ws.Conn) {
-	clientSub := ClientSubscription{
-		Id:    id,
-		Name:  name,
-		Topic: topic,
-		Conn:  conn,
-	}
-	if v, ok := clientSubNames.Get(clientSub); ok {
-		v = append(v, topic+":"+name)
-		clientSubNames.Set(ClientSubscription{Conn: conn, Id: id, Topic: topic, Name: name}, v)
-	} else {
-		clientSubNames.Set(ClientSubscription{Conn: conn, Id: id, Topic: topic, Name: name}, []string{topic + ":" + name})
-	}
-}
-
-func (s *Server) removeWS(wsConn *ws.Conn) {
+func (s *Server) removeWSFromAllTopics(wsConn *ws.Conn) {
 	go func() {
-		clientSubNames.Range(func(key ClientSubscription, value []string) {
-			if key.Conn == wsConn {
-				go clientSubNames.Delete(key)
-			}
-		})
 		s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
 			for i, sub := range value {
 				if sub.Conn == wsConn {
 					value = append(value[:i], value[i+1:]...)
 					go s.Bus.wsSubscribers.Set(key, value)
-					if len(value) == 0 {
-						s.localTopics.Delete(key)
-						if keepServing {
-							s.subscribedServersClients.Range(func(addr string, value *Client) {
-								go s.sendData(addr, map[string]any{
-									"action":          "remove_node_topic",
-									"addr":            LocalAddress,
-									"topic_to_delete": key,
-								})
-							})
-						}
-					}
 				}
 			}
 		})
@@ -107,19 +88,14 @@ func (s *Server) removeWS(wsConn *ws.Conn) {
 
 func (s *Server) unsubscribeWS(id, topic string, wsConn *ws.Conn) {
 	go func() {
-		s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
-			for i, sub := range value {
-				if sub.Conn == wsConn {
-					value = append(value[:i], value[i+1:]...)
-					go s.Bus.wsSubscribers.Set(key, value)
+		if clients, ok := s.Bus.wsSubscribers.Get(topic); ok {
+			for i, sub := range clients {
+				if sub.Conn == wsConn && sub.Id == id {
+					clients = append(clients[:i], clients[i+1:]...)
+					go s.Bus.wsSubscribers.Set(topic, clients)
 				}
 			}
-		})
-		clientSubNames.Range(func(key ClientSubscription, value []string) {
-			if key.Conn == wsConn {
-				go clientSubNames.Delete(key)
-			}
-		})
+		}
 	}()
 }
 
@@ -131,11 +107,6 @@ func (server *Server) AllTopics() []string {
 	server.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
 		res[key] = struct{}{}
 	})
-	clientSubNames.Range(func(key ClientSubscription, value []string) {
-		for _, v := range value {
-			res[v] = struct{}{}
-		}
-	})
 	n := []string{}
 	for k := range res {
 		n = append(n, k)
@@ -143,8 +114,20 @@ func (server *Server) AllTopics() []string {
 	return n
 }
 
-func (server *Server) handleWS(addr string) {
-	ws.FuncBeforeUpgradeWS = BeforeUpgradeWS
+func (server *Server) GetSubscribers(topic string) ([]Channel, []ClientSubscription) {
+	var channelsSubs []Channel
+	var wsSubs []ClientSubscription
+	if ss, ok := server.Bus.subscribers.Get(topic); ok {
+		channelsSubs = ss
+	}
+	if ss, ok := server.Bus.wsSubscribers.Get(topic); ok {
+		wsSubs = ss
+	}
+	return channelsSubs, wsSubs
+}
+
+func (server *Server) handleWS() {
+	ws.FuncBeforeUpgradeWS = OnUpgradeWS
 	server.App.Get(ServerPath, func(c *ksmux.Context) {
 		conn, err := ksmux.UpgradeConnection(c.ResponseWriter, c.Request, nil)
 		if klog.CheckError(err) {
@@ -153,27 +136,13 @@ func (server *Server) handleWS(addr string) {
 		for {
 			var m map[string]any
 			err := conn.ReadJSON(&m)
-			if err != nil || !BeforeDataWS(m, conn, c.Request) {
+			if err != nil || !OnDataWS(m, conn, c.Request) {
 				if err != nil && DEBUG {
 					klog.Printf("rd%v\n", err)
 				}
-				server.removeWS(conn)
+				server.removeWSFromAllTopics(conn)
 				break
 			}
-
-			if keepServing {
-				send := true
-				if publ, ok := m["from_publisher"]; ok && publ.(string) == "master" {
-					send = false
-				}
-				if send {
-					server.subscribedServersClients.Range(func(key string, value *Client) {
-						m["from_publisher"] = LocalAddress
-						go server.sendData(key, m)
-					})
-				}
-			}
-
 			if DEBUG {
 				klog.Printfs("--------------------------------\n")
 				klog.Printfs("yl%v \n", m)
@@ -222,29 +191,8 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					server.Bus.mu.Lock()
 					server.addWS(id.(string), topic.(string), conn)
 					server.Bus.mu.Unlock()
-					server.localTopics.Set(topic.(string), true)
 				} else {
-					fmt.Println("id not found, will not be added:", m)
-				}
-				if v, ok := m["name"]; ok {
-					if id, ok := m["id"]; ok {
-						addNamedWS(topic.(string), v.(string), id.(string), conn)
-						server.localTopics.Set(topic.(string)+":"+v.(string), true)
-					} else {
-						fmt.Println("id not found, will not be added:", m)
-					}
-				}
-				if keepServing {
-					go func() {
-						server.subscribedServersClients.Range(func(key string, value *Client) {
-							go server.sendData(key, map[string]any{
-								"from_publisher": LocalAddress,
-								"action":         "topics",
-								"addr":           LocalAddress,
-								"topics":         server.localTopics.Keys(),
-							})
-						})
-					}()
+					klog.Printf("rdid not found\n")
 				}
 			} else {
 				_ = conn.WriteJSON(map[string]any{
@@ -257,127 +205,54 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 				if id, ok := m["id"]; ok {
 					server.unsubscribeWS(id.(string), topic.(string), conn)
 				} else {
-					fmt.Println("id not found, will not be removed:", m)
-				}
-				if nn, ok := m["name"]; ok {
-					clientSubNames.Range(func(key ClientSubscription, value []string) {
-						for i, v := range value {
-							if id, ok := m["id"]; ok {
-								if (topic.(string) == nn || topic.(string)+":"+v == nn || v == nn) && key.Id == id {
-									value = append(value[:i], value[i+1:]...)
-									if len(value) == 0 {
-										go server.localTopics.Delete(topic.(string) + ":" + v)
-										go server.localTopics.Delete(v)
-									}
-									go clientSubNames.Set(key, value)
-								}
-							} else {
-								fmt.Println("id not found, will not be removed:", m)
-							}
-						}
-					})
-				}
-				if keepServing {
-					go func() {
-						server.subscribedServersClients.Range(func(key string, value *Client) {
-							go server.sendData(key, map[string]any{
-								"from_publisher": LocalAddress,
-								"action":         "topics",
-								"addr":           LocalAddress,
-								"topics":         server.localTopics.Keys(),
-							})
-						})
-					}()
+					klog.Printf("rdid not found, will not be removed:", m)
 				}
 			}
 		case "remove_topic", "removeTopic":
 			if topic, ok := m["topic"]; ok {
 				server.RemoveTopic(topic.(string))
-				if keepServing {
-					go func() {
-						server.subscribedServersClients.Range(func(key string, value *Client) {
-							go server.sendData(key, map[string]any{
-								"from_publisher": LocalAddress,
-								"action":         "topics",
-								"addr":           LocalAddress,
-								"topics":         server.localTopics.Keys(),
-							})
-						})
-					}()
-				}
 			} else {
 				_ = conn.WriteJSON(map[string]any{
 					"error": "topic missing",
 				})
 			}
-
-		case "send", "sendTo":
+		case "server_message", "serverMessage":
 			if data, ok := m["data"]; ok {
-				topic := ""
-				if top, ok := m["topic"]; ok && top != "" {
-					topic = top.(string)
+				if addr, ok := m["addr"]; ok && addr.(string) == LocalAddress {
+					OnServersData(data, conn)
 				}
+			}
+		case "pub_id":
+			if data, ok := m["data"]; ok {
 				switch v := data.(type) {
 				case string:
 					mm := map[string]any{
 						"data": v,
 					}
-					if name, ok := m["name"]; ok {
-						if nn, ok := name.(string); ok {
-							if topic != "" {
-								server.SendToNamed(topic+":"+nn, mm)
-							} else {
-								server.SendToNamed(nn, mm)
-							}
-						}
+					if id, ok := m["id"]; ok {
+						mm["id"] = id.(string)
+						server.PublishToID(id.(string), mm)
 					} else {
 						_ = conn.WriteJSON(map[string]any{
-							"error": "name missing",
+							"error": "id missing",
 						})
 					}
 				case map[string]any:
-					if name, ok := m["name"]; ok {
-						if topic != "" {
-							server.SendToNamed(topic+":"+name.(string), v)
+					if id, ok := m["id"]; ok {
+						if from, ok := m["from"]; ok {
+							server.PublishToID(id.(string), v, from.(string))
 						} else {
-							server.SendToNamed(name.(string), v)
+							server.PublishToID(id.(string), v)
 						}
 					} else {
 						_ = conn.WriteJSON(map[string]any{
-							"error": "name missing",
+							"error": "id missing",
 						})
 					}
 				default:
 					_ = conn.WriteJSON(map[string]any{
-						"error": "type not handled, only json or object stringified",
+						"error": "type not handled, only json",
 					})
-				}
-			}
-		case "server_sub":
-			if sc, ok := m["secure"]; ok {
-				if v, ok := sc.(bool); ok {
-					keepServing = true
-					client := NewClient()
-					err := client.Connect(m["addr"].(string), v)
-					klog.CheckError(err)
-					server.subscribedServersClients.Set(m["addr"].(string), client)
-					topics := server.AllTopics()
-					for _, t := range topics {
-						server.localTopics.Set(t, true)
-					}
-					client.sendDataToServer(map[string]any{
-						"action": "topics",
-						"addr":   LocalAddress,
-						"topics": topics,
-					})
-				} else {
-					klog.Printf("rd secure not bool %T\n", v)
-				}
-			}
-		case "server_message", "serverMessage":
-			if data, ok := m["data"]; ok {
-				if addr, ok := m["addr"]; ok && addr.(string) == LocalAddress {
-					BeforeServersData(data, conn)
 				}
 			}
 		case "ping":
@@ -389,24 +264,6 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 				"error": "action " + action.(string) + " not handled",
 			})
 		}
-	}
-}
-
-func (b *Bus) setName(ch Channel, name string) {
-	ch.Name = name
-	if ch.Topic != "" && ch.Name != "" {
-		ch.Name = ch.Topic + ":" + ch.Name
-	}
-	if ch.Id == "" {
-		ch.Id = GenerateRandomString(5)
-	}
-	if v, ok := b.channelsName.Get(ch); ok {
-		if !ksmux.SliceContains(v, ch.Name) {
-			v = append(v, ch.Name)
-			b.channelsName.Set(ch, v)
-		}
-	} else {
-		b.channelsName.Set(ch, []string{ch.Name})
 	}
 }
 
@@ -431,7 +288,7 @@ func RetryEvery(t time.Duration, function func() error, maxRetry ...int) {
 			if i < maxRetry[0] {
 				err = function()
 			} else {
-				fmt.Println("stoping retry after", maxRetry, "times")
+				klog.Printf("stoping retry after %v times\n")
 				break
 			}
 		} else {

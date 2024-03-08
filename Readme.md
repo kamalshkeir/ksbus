@@ -312,16 +312,16 @@ func main() {
 
 ## Before Handlers 
 ```go
-// before upgrade WS connection
-BeforeUpgradeWS=func(r *http.Request) bool {
+// On upgrade WS connection
+OnUpgradeWS=func(r *http.Request) bool {
 	return true
 }
-// before recv data on WS
-BeforeDataWS = func(data map[string]any,conn *ws.Conn, originalRequest *http.Request) bool {
+// On recv data on WS
+OnDataWS = func(data map[string]any,conn *ws.Conn, originalRequest *http.Request) bool {
 	return true
 }
-// Before Recv data from another server
-BeforeServersData = func(data any,conn *ws.Conn) {
+// On Recv data from another server
+OnServersData = func(data any,conn *ws.Conn) {
 	return
 }
 ```

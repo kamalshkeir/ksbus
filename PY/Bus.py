@@ -56,22 +56,10 @@ class Bus:
                 if "topic" in obj:
                     if obj["topic"] in self.topic_handlers:
                         subs = BusSubscription(self, obj["topic"])
-                        if "name" in obj:
-                            subs = BusSubscription(
-                                self, obj["topic"], obj["name"])
                         self.topic_handlers[obj["topic"]](obj, subs)
                     else:
                         print(
                             f"topicHandler not found for: {obj['topic']}")
-                elif "name" in obj:
-                    if obj["name"] in self.topic_handlers:
-                        subs = BusSubscription(self, obj["topic"])
-                        if "topic" in obj:
-                            subs = BusSubscription(
-                                self, obj["topic"], obj["name"])
-                        self.topic_handlers[obj["name"]](obj, subs)
-                    else:
-                        print(f"topicHandler not found for: {obj['name']}")
                 elif "data" in obj and obj["data"] == "pong":
                     if self.on_open is None:
                         print("no onOpen callback was given in bus constructor")
@@ -87,26 +75,19 @@ class Bus:
                     await asyncio.sleep(self.restartevery)
                     await self.connect(self.path)
 
-    def Subscribe(self, topic, handler, name=""):
+    def Subscribe(self, topic, handler):
         payload = {"action": "sub", "topic": topic, "id": self.id}
-        if name:
-            payload["name"] = name
-            subs = BusSubscription(self, topic, name)
-            self.topic_handlers[topic + ":" + name] = handler
-        else:
-            subs = BusSubscription(self, topic)
-            self.topic_handlers[topic] = handler
+        subs = BusSubscription(self, topic)
+        self.topic_handlers[topic] = handler
+            
         if self.conn is not None:
             asyncio.create_task(self.sendMessage(payload))
         return subs
 
-    def Unsubscribe(self, topic, name=""):
+    def Unsubscribe(self, topic):
         payload = {"action": "unsub", "topic": topic, "id": self.id}
-        if name:
-            payload["name"] = name
-            del self.topic_handlers[topic + ":" + name]
-        else:
-            del self.topic_handlers[topic]
+        del self.topic_handlers[topic]
+            
         if topic and self.conn is not None:
             asyncio.create_task(self.sendMessage(payload))
 
@@ -123,12 +104,12 @@ class Bus:
         else:
             print("Publish: Not connected to server. Please check the connection.")
 
-    def SendToNamed(self, name, data, topic=""):
-        payload = {"action": "send", "name": name, "data": data, "id": self.id}
+    def PublishToID(self, topic, data):
         if self.conn is not None:
-            if topic:
-                payload["topic"] = topic
-            asyncio.create_task(self.sendMessage(payload))
+            asyncio.create_task(self.sendMessage(
+                {"action": "pub_id", "id": self.id, "data": data, "from": self.id}))
+        else:
+            print("PublishToID: Not connected to server. Please check the connection.")
 
     def RemoveTopic(self, topic):
         if self.conn is not None:
@@ -145,10 +126,9 @@ class Bus:
 
 
 class BusSubscription:
-    def __init__(self, bus, topic, name=""):
+    def __init__(self, bus, topic):
         self.bus = bus
         self.topic = topic
-        self.name = name
 
     async def sendMessage(self, obj):
         try:
@@ -157,15 +137,6 @@ class BusSubscription:
             print("error sending message:", e)
 
     def Unsubscribe(self):
-        if self.name:
-            asyncio.create_task(self.sendMessage({
-                "action": "unsub",
-                "topic": self.topic,
-                "name": self.name,
-                "id": self.bus.id,
-            }))
-            del self.bus.topic_handlers[self.topic]
-            del self.bus.topic_handlers[self.topic + ":" + self.name]
-        else:
-            asyncio.create_task(self.sendMessage({"action": "unsub", "topic": self.topic, "id": self.bus.id}))
-            del self.bus.topic_handlers[self.topic]
+        asyncio.create_task(self.sendMessage({"action": "unsub", "topic": self.topic, "id": self.bus.id}))
+        del self.bus.topic_handlers[self.topic]
+            

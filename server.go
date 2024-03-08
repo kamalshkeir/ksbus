@@ -3,7 +3,6 @@ package ksbus
 import (
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/kamalshkeir/klog"
@@ -13,12 +12,11 @@ import (
 )
 
 type Server struct {
-	Bus                      *Bus
-	App                      *ksmux.Router
-	sendToServerConnections  *kmap.SafeMap[string, *ws.Conn]
-	subscribedServersClients *kmap.SafeMap[string, *Client]
-	localTopics              *kmap.SafeMap[string, bool]
-	mu                       sync.Mutex
+	ID                      string
+	Bus                     *Bus
+	App                     *ksmux.Router
+	onData                  func(data map[string]any)
+	sendToServerConnections *kmap.SafeMap[string, *ws.Conn]
 }
 
 func NewServer(bus ...*Bus) *Server {
@@ -30,13 +28,19 @@ func NewServer(bus ...*Bus) *Server {
 	}
 	app := ksmux.New()
 	server := Server{
-		Bus:                      b,
-		App:                      app,
-		sendToServerConnections:  kmap.New[string, *ws.Conn](false),
-		subscribedServersClients: kmap.New[string, *Client](false),
-		localTopics:              kmap.New[string, bool](false),
+		ID:                      GenerateUUID(),
+		Bus:                     b,
+		App:                     app,
+		sendToServerConnections: kmap.New[string, *ws.Conn](false),
 	}
 	return &server
+}
+
+func (s *Server) OnData(fn func(data map[string]any)) {
+	s.onData = fn
+	s.Subscribe("idsssss", func(data map[string]any, _ Channel) {
+		s.onData(data)
+	})
 }
 
 func (s *Server) WithPprof(path ...string) {
@@ -47,27 +51,11 @@ func (s *Server) WithMetrics(httpHandler http.Handler, path ...string) {
 	s.App.WithMetrics(httpHandler, path...)
 }
 
-func (s *Server) JoinCombinedServer(combinedAddr string, secure bool) error {
-	keepServing = true
-	client := NewClient()
-	err := client.Connect(combinedAddr, secure)
-	if err != nil {
-		return err
-	}
-	s.subscribedServersClients.Set(combinedAddr, client)
-	s.sendData(combinedAddr, map[string]any{
-		"action": "new_node",
-		"addr":   LocalAddress,
-		"secure": secure,
-	})
-	return nil
-}
-
-func (s *Server) Subscribe(topic string, fn func(data map[string]any, ch Channel), name ...string) (ch Channel) {
+func (s *Server) Subscribe(topic string, fn func(data map[string]any, ch Channel)) (ch Channel) {
 	if DEBUG {
 		klog.Printfs("grSubscribing to topic %s\n", topic)
 	}
-	return s.Bus.Subscribe(topic, fn, name...)
+	return s.Bus.Subscribe(topic, fn)
 }
 
 func (s *Server) Unsubscribe(ch Channel) {
@@ -76,15 +64,39 @@ func (s *Server) Unsubscribe(ch Channel) {
 	}
 }
 
-func (s *Server) Publish(topic string, data map[string]any) {
+func (s *Server) Publish(topic string, data map[string]any, from ...string) {
+	if len(from) > 0 {
+		if _, ok := data["from"]; !ok {
+			data["from"] = from[0]
+		}
+	}
 	s.Bus.Publish(topic, data)
 	s.publishWS(topic, data)
 }
 
-func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, ch Channel)) {
+func (s *Server) PublishToID(id string, data map[string]any, from ...string) {
+	if len(from) > 0 {
+		if _, ok := data["from"]; !ok {
+			data["from"] = from[0]
+		}
+	}
+	if id == s.ID {
+		s.onData(data)
+		return
+	}
+	s.Bus.PublishToID(id, data)
+	s.publishWSToID(id, data)
+}
+
+func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, ch Channel), from ...string) {
 	data["topic"] = topic
 	eventId := GenerateRandomString(12)
 	data["event_id"] = eventId
+	if len(from) > 0 {
+		if _, ok := data["from"]; !ok {
+			data["from"] = from[0]
+		}
+	}
 	done := make(chan struct{})
 	s.Publish(topic, data)
 	s.Subscribe(eventId, func(data map[string]any, ch Channel) {
@@ -107,26 +119,6 @@ func (s *Server) RemoveTopic(topic string) {
 		klog.Printfs("grRemoving topic %s\n", topic)
 	}
 	s.Bus.RemoveTopic(topic)
-}
-
-func (s *Server) SendToNamed(name string, data map[string]any) {
-	if DEBUG {
-		klog.Printfs("grSendTo: sending %v on %s \n", data, name)
-	}
-	data["name"] = name
-	s.Bus.SendToNamed(name, data)
-	clientSubNames.Range(func(sub ClientSubscription, names []string) {
-		for _, n := range names {
-			if n == name {
-				s.mu.Lock()
-				defer s.mu.Unlock()
-				err := sub.Conn.WriteJSON(data)
-				if err != nil {
-					klog.Printf("rderr:%v\n", err)
-				}
-			}
-		}
-	})
 }
 
 func (s *Server) SendToServer(addr string, data map[string]any, secure ...bool) {
@@ -159,44 +151,21 @@ func (s *Server) SendToServer(addr string, data map[string]any, secure ...bool) 
 	}
 }
 
-func (s *Server) sendData(addr string, data map[string]any, secure ...bool) *ws.Conn {
-
-	sch := "ws"
-	if len(secure) > 0 && secure[0] {
-		sch = "wss"
-	}
-	u := url.URL{Scheme: sch, Host: addr, Path: ServerPath}
-	conn, ok := s.sendToServerConnections.Get(addr)
-	if !ok {
-		var err error
-		conn, _, err = ws.DefaultDialer.Dial(u.String(), nil)
-		if err != nil {
-			klog.Printfs("rdsendData Dial %s error:%v\n", u.String(), err)
-			return nil
-		}
-	}
-	if err := conn.WriteJSON(data); err != nil {
-		klog.Printfs("rdsendData WriteJSON on %s error:%v\n", u.String(), err)
-		return nil
-	}
-	return conn
-}
-
 // RUN
 func (s *Server) Run(addr string) {
 	LocalAddress = addr
-	s.handleWS(addr)
+	s.handleWS()
 	s.App.Run(addr)
 }
 
 func (s *Server) RunTLS(addr string, cert string, certKey string) {
 	LocalAddress = addr
-	s.handleWS(addr)
+	s.handleWS()
 	s.App.RunTLS(addr, cert, certKey)
 }
 
 func (s *Server) RunAutoTLS(domainName string, subDomains ...string) {
 	LocalAddress = domainName
-	s.handleWS(domainName)
+	s.handleWS()
 	s.App.RunAutoTLS(domainName, subDomains...)
 }

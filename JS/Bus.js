@@ -1,10 +1,12 @@
 class Bus {
     /**
      * Bus can be initialized without any param 'let bus = new Bus()'
-     * @param {object} options "default: {}"
+     * @param {object} options "default: {...}"
      * @param {string} options.addr "default: window.location.host"
      * @param {string} options.path "default: /ws/bus"
      * @param {boolean} options.secure "default: false"
+     * @param {boolean} options.autorestart "default: false"
+     * @param {10} options.restartevery "default: 10"
      */
     constructor(options) {
         if (options === undefined) {
@@ -13,14 +15,14 @@ class Bus {
         this.addr=options.addr || window.location.host;
         this.path=options.path || "/ws/bus";
         this.scheme=options.scheme || "ws://";
+        this.fullAddress=this.scheme+this.addr+this.path;
+        this.TopicHandlers={};
+        this.autorestart=options.autorestart || false;
+        this.restartevery=options.restartevery || 10;
         this.secure=options.secure || false;
         if (this.secure) {
             this.scheme="wss://"
         }
-        this.fullAddress=this.scheme+this.addr+this.path;
-        this.TopicHandlers={};
-        this.autorestart=false;
-        this.restartevery=10;
         this.OnOpen=() =>{};
         this.OnClose=() =>{};
         this.OnData=(data) =>{};

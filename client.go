@@ -32,18 +32,23 @@ type ClientSubscription struct {
 var clientId string
 
 type ClientConnectOptions struct {
-	Address string
-	Secure  bool
-	Path    string
-	OnData  func(data map[string]any)
+	Address      string
+	Secure       bool
+	Path         string // default ksbus.ServerPath
+	Autorestart  bool
+	RestartEvery time.Duration
+	OnData       func(data map[string]any)
 }
 
 func NewClient(opts ClientConnectOptions) (*Client, error) {
 	clientId = GenerateUUID()
+	if opts.Autorestart && opts.RestartEvery == 0 {
+		opts.RestartEvery = 10 * time.Second
+	}
 	cl := &Client{
 		Id:            clientId,
-		Autorestart:   false,
-		RestartEvery:  10 * time.Second,
+		Autorestart:   opts.Autorestart,
+		RestartEvery:  opts.RestartEvery,
 		topicHandlers: kmap.New[string, func(map[string]any, *ClientSubscription)](false),
 		onData:        opts.OnData,
 		Done:          make(chan struct{}),

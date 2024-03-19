@@ -113,8 +113,8 @@ func (client *Client) handle() {
 		eventId, okEvent := data["event_id"]
 		if okEvent {
 			client.Publish(eventId.(string), map[string]any{
-				"success": "got the event",
-				"id":      client.Id,
+				"ok":    "done",
+				"go_id": client.Id,
 			})
 		}
 		found := false
@@ -137,7 +137,7 @@ func (client *Client) Subscribe(topic string, handler func(data map[string]any, 
 	data := map[string]any{
 		"action": "sub",
 		"topic":  topic,
-		"id":     id,
+		"from":   id,
 	}
 
 	err := client.Conn.WriteJSON(data)
@@ -161,7 +161,7 @@ func (client *Client) Unsubscribe(topic string) {
 	data := map[string]any{
 		"action": "unsub",
 		"topic":  topic,
-		"id":     client.Id,
+		"from":   client.Id,
 	}
 	err := client.Conn.WriteJSON(data)
 	if err != nil {
@@ -175,8 +175,22 @@ func (client *Client) Publish(topic string, data map[string]any) {
 		"data":   data,
 		"action": "pub",
 		"topic":  topic,
-		"id":     client.Id,
+		"from":   client.Id,
 	}
+	_ = client.Conn.WriteJSON(data)
+}
+
+func (client *Client) PublishToServer(addr string, data map[string]any, secure ...bool) {
+	data = map[string]any{
+		"action": "pub_server",
+		"data":   data,
+		"addr":   addr,
+		"from":   client.Id,
+	}
+	if len(secure) > 0 && secure[0] {
+		data["secure"] = true
+	}
+
 	_ = client.Conn.WriteJSON(data)
 }
 
@@ -190,11 +204,67 @@ func (client *Client) PublishToID(id string, data map[string]any) {
 	_ = client.Conn.WriteJSON(data)
 }
 
+func (client *Client) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, sub *ClientSubscription), onExpire func(eventId string, topic string)) {
+	eventId := GenerateUUID()
+	data["from"] = client.Id
+	data["event_id"] = eventId
+	data["topic"] = topic
+	done := make(chan struct{})
+
+	client.Subscribe(eventId, func(data map[string]any, sub *ClientSubscription) {
+		done <- struct{}{}
+		if onRecv != nil {
+			onRecv(data, sub)
+		}
+	})
+	client.Publish(topic, data)
+free:
+	for {
+		select {
+		case <-done:
+			break free
+		case <-time.After(500 * time.Millisecond):
+			if onExpire != nil {
+				onExpire(eventId, topic)
+			}
+			break free
+		}
+	}
+}
+
+func (client *Client) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any, sub *ClientSubscription), onExpire func(eventId string, id string)) {
+	eventId := GenerateUUID()
+	data["from"] = client.Id
+	data["event_id"] = eventId
+	data["id"] = id
+	done := make(chan struct{})
+
+	client.Subscribe(eventId, func(data map[string]any, sub *ClientSubscription) {
+		done <- struct{}{}
+		if onRecv != nil {
+			onRecv(data, sub)
+		}
+	})
+	client.PublishToID(id, data)
+free:
+	for {
+		select {
+		case <-done:
+			break free
+		case <-time.After(500 * time.Millisecond):
+			if onExpire != nil {
+				onExpire(eventId, id)
+			}
+			break free
+		}
+	}
+}
+
 func (client *Client) RemoveTopic(topic string) {
 	data := map[string]any{
 		"action": "removeTopic",
 		"topic":  topic,
-		"id":     client.Id,
+		"from":   client.Id,
 	}
 	err := client.Conn.WriteJSON(data)
 	if err != nil {
@@ -237,7 +307,7 @@ func (subscribtion *ClientSubscription) Unsubscribe() *ClientSubscription {
 	data := map[string]any{
 		"action": "unsub",
 		"topic":  subscribtion.Topic,
-		"id":     clientId,
+		"from":   clientId,
 	}
 	err := subscribtion.Conn.WriteJSON(data)
 	if err != nil {

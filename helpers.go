@@ -1,6 +1,7 @@
 package ksbus
 
 import (
+	"strings"
 	"time"
 
 	"github.com/kamalshkeir/klog"
@@ -22,18 +23,15 @@ func (s *Server) publishWS(topic string, data map[string]any) {
 func (s *Server) publishWSToID(id string, data map[string]any) {
 	s.Bus.mu.Lock()
 	defer s.Bus.mu.Unlock()
-	data["id"] = id
-	s.Bus.wsSubscribers.Range(func(_ string, value []ClientSubscription) {
-		for i := range value {
-			if value[i].Id == id {
-				_ = value[i].Conn.WriteJSON(data)
-				return
-			}
+	s.allWS.Range(func(key *ws.Conn, value string) {
+		if value == id {
+			_ = key.WriteJSON(data)
+			return
 		}
 	})
 }
 
-func (s *Server) addWS(id, topic string, conn *ws.Conn) {
+func (s *Server) subscribeWS(id, topic string, conn *ws.Conn) {
 	wsSubscribers := s.Bus.wsSubscribers
 	new := ClientSubscription{
 		Conn:  conn,
@@ -77,7 +75,7 @@ func (s *Server) removeWSFromAllTopics(wsConn *ws.Conn) {
 				}
 			}
 		})
-
+		s.allWS.Delete(wsConn)
 		s.sendToServerConnections.Range(func(key string, value *ws.Conn) {
 			if value == wsConn {
 				go s.sendToServerConnections.Delete(key)
@@ -187,12 +185,12 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 
 		case "sub", "subscribe":
 			if topic, ok := m["topic"]; ok {
-				if id, ok := m["id"]; ok {
+				if from, ok := m["from"]; ok {
 					server.Bus.mu.Lock()
-					server.addWS(id.(string), topic.(string), conn)
+					server.subscribeWS(from.(string), topic.(string), conn)
 					server.Bus.mu.Unlock()
 				} else {
-					klog.Printf("rdid not found\n")
+					klog.Printf("rdfrom not found\n")
 				}
 			} else {
 				_ = conn.WriteJSON(map[string]any{
@@ -202,10 +200,10 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 
 		case "unsub", "unsubscribe":
 			if topic, ok := m["topic"]; ok {
-				if id, ok := m["id"]; ok {
-					server.unsubscribeWS(id.(string), topic.(string), conn)
+				if from, ok := m["from"]; ok {
+					server.unsubscribeWS(from.(string), topic.(string), conn)
 				} else {
-					klog.Printf("rdid not found, will not be removed:", m)
+					klog.Printf("rdfrom not found, will not be removed:", m)
 				}
 			}
 		case "remove_topic", "removeTopic":
@@ -218,7 +216,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 			}
 		case "server_message", "serverMessage":
 			if data, ok := m["data"]; ok {
-				if addr, ok := m["addr"]; ok && addr.(string) == LocalAddress {
+				if addr, ok := m["addr"]; ok && strings.Contains(addr.(string), LocalAddress) {
 					OnServersData(data, conn)
 				}
 			}
@@ -230,7 +228,6 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 						"data": v,
 					}
 					if id, ok := m["id"]; ok {
-						mm["id"] = id.(string)
 						server.PublishToID(id.(string), mm)
 					} else {
 						_ = conn.WriteJSON(map[string]any{
@@ -239,11 +236,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					}
 				case map[string]any:
 					if id, ok := m["id"]; ok {
-						if from, ok := m["from"]; ok {
-							server.PublishToID(id.(string), v, from.(string))
-						} else {
-							server.PublishToID(id.(string), v)
-						}
+						server.PublishToID(id.(string), v)
 					} else {
 						_ = conn.WriteJSON(map[string]any{
 							"error": "id missing",
@@ -255,10 +248,50 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					})
 				}
 			}
+		case "pub_server":
+			if data, ok := m["data"]; ok {
+				switch v := data.(type) {
+				case string:
+					mm := map[string]any{
+						"data": v,
+					}
+					if addr, ok := m["addr"].(string); ok {
+						if strings.Contains(addr, LocalAddress) {
+							OnServersData(mm, conn)
+							return
+						}
+					}
+					if secure, ok := m["secure"]; ok && secure.(bool) {
+						server.PublishToServer(m["addr"].(string), mm, true)
+					} else {
+						server.PublishToServer(m["addr"].(string), mm)
+					}
+				case map[string]any:
+					if addr, ok := m["addr"].(string); ok {
+						if strings.Contains(addr, LocalAddress) {
+							OnServersData(m, conn)
+							return
+						}
+					}
+					if secure, ok := m["secure"]; ok && secure.(bool) {
+						server.PublishToServer(m["addr"].(string), v, true)
+					} else {
+						server.PublishToServer(m["addr"].(string), v)
+					}
+				default:
+					_ = conn.WriteJSON(map[string]any{
+						"error": "type not handled, only json",
+					})
+				}
+			}
 		case "ping":
+			if from, ok := m["from"]; ok {
+				server.allWS.Set(conn, from.(string))
+			}
 			_ = conn.WriteJSON(map[string]any{
 				"data": "pong",
 			})
+
 		default:
 			_ = conn.WriteJSON(map[string]any{
 				"error": "action " + action.(string) + " not handled",

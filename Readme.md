@@ -91,7 +91,7 @@ func (s *Server) Publish(topic string, data map[string]any, from ...string)
 func (s *Server) PublishToID(id string, data map[string]any, from ...string)
 func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, ch Channel), from ...string)
 func (s *Server) RemoveTopic(topic string)
-func (s *Server) SendToServer(addr string, data map[string]any, secure ...bool)
+func (s *Server) PublishToServer(addr string, data map[string]any, secure ...bool)
 func (s *Server) Run(addr string)
 func (s *Server) RunTLS(addr string, cert string, certKey string)
 func (s *Server) RunAutoTLS(domainName string, subDomains ...string)
@@ -277,7 +277,7 @@ btn.addEventListener("click",(e) => {
 ```go
 OnDataWS      = func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool { return true } // Used for go bus server and client when getting data from the ws connection
 OnUpgradeWS   = func(r *http.Request) bool { return true } // Before upgrading the request to WS
-OnServersData = func(data any, conn *ws.Conn) {} // when recv data from other servers via srvBus.SendToServer
+OnServersData = func(data any, conn *ws.Conn) {} // when recv data from other servers via srvBus.PublishToServer
 ```
 
 

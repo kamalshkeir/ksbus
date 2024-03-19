@@ -37,10 +37,9 @@ func New() *Bus {
 }
 
 // Subscribe let you subscribe to a topic and return a unsubscriber channel
-func (b *Bus) Subscribe(topic string, fn func(data map[string]any, ch Channel)) (ch Channel) {
+func (b *Bus) Subscribe(topic string, fn func(data map[string]any, ch Channel), onData ...func(data map[string]any)) (ch Channel) {
 	// add sub
 	ch = Channel{
-		Id:    GenerateRandomString(5),
 		Ch:    make(chan map[string]any),
 		Topic: topic,
 		bus:   b,
@@ -54,6 +53,9 @@ func (b *Bus) Subscribe(topic string, fn func(data map[string]any, ch Channel)) 
 
 	go func() {
 		for v := range ch.Ch {
+			if len(onData) > 0 && onData[0] != nil {
+				onData[0](v)
+			}
 			fn(v, ch)
 		}
 	}()
@@ -75,22 +77,22 @@ func (b *Bus) Unsubscribe(ch Channel) {
 	close(ch.Ch)
 }
 
-func (b *Bus) UnsubscribeId(topic, id string) {
-	// add sub
-	chns := Channel{}
-	if subs, found := b.subscribers.Get(topic); found {
-		for i, sub := range subs {
-			if sub.Id == id && sub.Topic == topic {
-				chns = sub
-				subs = append(subs[:i], subs[i+1:]...)
-			}
-		}
-		b.mu.Lock()
-		b.subscribers.Set(topic, subs)
-		b.mu.Unlock()
-	}
-	close(chns.Ch)
-}
+// func (b *Bus) UnsubscribeId(topic, id string) {
+// 	// add sub
+// 	chns := Channel{}
+// 	if subs, found := b.subscribers.Get(topic); found {
+// 		for i, sub := range subs {
+// 			if sub.Id == id && sub.Topic == topic {
+// 				chns = sub
+// 				subs = append(subs[:i], subs[i+1:]...)
+// 			}
+// 		}
+// 		b.mu.Lock()
+// 		b.subscribers.Set(topic, subs)
+// 		b.mu.Unlock()
+// 	}
+// 	close(chns.Ch)
+// }
 
 func (b *Bus) Publish(topic string, data map[string]any) {
 	data["topic"] = topic
@@ -104,23 +106,23 @@ func (b *Bus) Publish(topic string, data map[string]any) {
 	}
 }
 
-func (b *Bus) PublishToID(id string, data map[string]any) {
-	data["id"] = id
-	b.subscribers.Range(func(_ string, value []Channel) {
-		for i := range value {
-			if value[i].Id == id {
-				channels := append([]Channel{}, value...)
-				go func() {
-					for _, ch := range channels {
-						ch.Ch <- data
-					}
-				}()
-				return
-			}
+// func (b *Bus) PublishToID(id string, data map[string]any) {
+// 	data["id"] = id
+// 	b.subscribers.Range(func(_ string, value []Channel) {
+// 		for i := range value {
+// 			if value[i].Id == id {
+// 				channels := append([]Channel{}, value...)
+// 				go func() {
+// 					for _, ch := range channels {
+// 						ch.Ch <- data
+// 					}
+// 				}()
+// 				return
+// 			}
 
-		}
-	})
-}
+// 		}
+// 	})
+// }
 
 func (b *Bus) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, ch Channel)) {
 	data["topic"] = topic

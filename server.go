@@ -15,7 +15,8 @@ type Server struct {
 	ID                      string
 	Bus                     *Bus
 	App                     *ksmux.Router
-	onData                  func(data map[string]any)
+	onDataWS                func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error
+	onId                    func(data map[string]any)
 	sendToServerConnections *kmap.SafeMap[string, *ws.Conn]
 	allWS                   *kmap.SafeMap[*ws.Conn, string]
 }
@@ -38,8 +39,11 @@ func NewServer(bus ...*Bus) *Server {
 	return &server
 }
 
-func (s *Server) OnData(fn func(data map[string]any)) {
-	s.onData = fn
+func (s *Server) OnDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error) {
+	s.onDataWS = fn
+}
+func (s *Server) OnId(fn func(data map[string]any)) {
+	s.onId = fn
 }
 
 func (s *Server) WithPprof(path ...string) {
@@ -82,8 +86,8 @@ func (s *Server) PublishToID(id string, data map[string]any) {
 	if _, ok := data["from"]; !ok {
 		data["from"] = s.ID
 	}
-	if id == s.ID && s.onData != nil {
-		s.onData(data)
+	if id == s.ID && s.onId != nil {
+		s.onId(data)
 		return
 	}
 

@@ -2,11 +2,12 @@ class Bus {
     /**
      * Bus can be initialized without any param 'let bus = new Bus()'
      * @param {object} options "default: {...}"
+     * @param {string} options.id "default: uuid"
      * @param {string} options.addr "default: window.location.host"
      * @param {string} options.path "default: /ws/bus"
      * @param {boolean} options.secure "default: false"
      * @param {boolean} options.autorestart "default: false"
-     * @param {10} options.restartevery "default: 10"
+     * @param {number} options.restartevery "default: 10"
      */
     constructor(options) {
         if (options === undefined) {
@@ -25,8 +26,9 @@ class Bus {
         }
         this.OnOpen = () => { };
         this.OnClose = () => { };
-        this.OnData = (data) => { };
-        this.id = this.makeid();
+        this.OnDataWs = (data, ws) => { };
+        this.OnId = (data) => { };
+        this.id = options.id || this.makeid();
         this.conn = this.connect(this.fullAddress, this.callback);
     }
 
@@ -47,7 +49,11 @@ class Bus {
         $this.conn.onmessage = (e) => {
             let obj = JSON.parse(e.data);
             $this.subscription = {};
-            $this.OnData(obj);
+            $this.OnDataWs(obj, $this.conn);
+            if ($this.OnId !== undefined && obj.to_id === $this.id) {
+                delete obj.to_id
+                $this.OnId(obj);
+            }
             if (obj.event_id !== undefined) {
                 $this.Publish(obj.event_id, {
                     "ok": "done",
@@ -144,11 +150,12 @@ class Bus {
         let eventId = this.makeid();
         data.event_id = eventId;
         let done = false;
-        
+
         this.Subscribe(eventId, (data, ch) => {
             done = true;
             if (onRecv) {
-                onRecv(data, ch);
+                onRecv(data);
+                ch.Unsubscribe()
             }
         });
         this.Publish(topic, data);
@@ -156,7 +163,7 @@ class Bus {
             clearTimeout(timer);
             if (!done) {
                 if (onExpire) {
-                    onExpire(eventId,topic);
+                    onExpire(eventId, topic);
                 }
             }
         }, 500);
@@ -175,11 +182,12 @@ class Bus {
         let eventId = this.makeid();
         data.event_id = eventId;
         let done = false;
-        
+
         this.Subscribe(eventId, (data, ch) => {
             done = true;
             if (onRecv) {
-                onRecv(data, ch);
+                onRecv(data);
+                ch.Unsubscribe();
             }
         });
         this.PublishToID(id, data);
@@ -187,13 +195,13 @@ class Bus {
             clearTimeout(timer);
             if (!done) {
                 if (onExpire) {
-                    onExpire(eventId,id);
+                    onExpire(eventId, id);
                 }
             }
         }, 500);
     }
 
-    
+
 
     /**
      * PublishToServer publish to a server using addr like localhost:4444 or domain name https

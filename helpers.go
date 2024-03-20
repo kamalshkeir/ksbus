@@ -21,6 +21,7 @@ func (s *Server) publishWS(topic string, data map[string]any) {
 }
 
 func (s *Server) publishWSToID(id string, data map[string]any) {
+	data["to_id"] = id
 	s.Bus.mu.Lock()
 	defer s.Bus.mu.Unlock()
 	s.allWS.Range(func(key *ws.Conn, value string) {
@@ -134,12 +135,18 @@ func (server *Server) handleWS() {
 		for {
 			var m map[string]any
 			err := conn.ReadJSON(&m)
-			if err != nil || !OnDataWS(m, conn, c.Request) {
-				if err != nil && DEBUG {
+			if err != nil {
+				if DEBUG {
 					klog.Printf("rd%v\n", err)
 				}
 				server.removeWSFromAllTopics(conn)
 				break
+			}
+			if err := server.onDataWS(m, conn, c.Request); err != nil {
+				_ = conn.WriteJSON(map[string]any{
+					"error": err.Error(),
+				})
+				continue
 			}
 			if DEBUG {
 				klog.Printfs("--------------------------------\n")
@@ -170,6 +177,9 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					}
 				case map[string]any:
 					if topic, ok := m["topic"]; ok {
+						if from, ok := m["from"]; ok {
+							v["from"] = from
+						}
 						server.Publish(topic.(string), v)
 					} else {
 						_ = conn.WriteJSON(map[string]any{
@@ -236,6 +246,9 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					}
 				case map[string]any:
 					if id, ok := m["id"]; ok {
+						if from, ok := m["from"]; ok {
+							v["from"] = from
+						}
 						server.PublishToID(id.(string), v)
 					} else {
 						_ = conn.WriteJSON(map[string]any{
@@ -285,8 +298,21 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 				}
 			}
 		case "ping":
-			if from, ok := m["from"]; ok {
-				server.allWS.Set(conn, from.(string))
+			if from, ok := m["from"].(string); ok {
+				found := false
+				for _, v := range server.allWS.Values() {
+					if v == from {
+						found = true
+					}
+				}
+				if !found {
+					server.allWS.Set(conn, from)
+				} else {
+					_ = conn.WriteJSON(map[string]any{
+						"error": "ID already exist, should be unique",
+					})
+				}
+
 			}
 			_ = conn.WriteJSON(map[string]any{
 				"data": "pong",

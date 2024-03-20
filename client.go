@@ -15,7 +15,8 @@ import (
 type Client struct {
 	Id            string
 	ServerAddr    string
-	onData        func(data map[string]any)
+	onDataWS      func(data map[string]any, conn *ws.Conn) error
+	onId          func(data map[string]any, subs *ClientSubscription)
 	RestartEvery  time.Duration
 	Conn          *ws.Conn
 	Autorestart   bool
@@ -29,30 +30,39 @@ type ClientSubscription struct {
 	Conn  *ws.Conn
 }
 
-var clientId string
-
 type ClientConnectOptions struct {
+	Id           string
 	Address      string
 	Secure       bool
 	Path         string // default ksbus.ServerPath
 	Autorestart  bool
 	RestartEvery time.Duration
-	OnData       func(data map[string]any)
+	OnDataWs     func(data map[string]any, conn *ws.Conn) error
+	OnId         func(data map[string]any, subs *ClientSubscription) // used when client bus receive data on his ID 'client.Id'
 }
 
+var clientId string
+
 func NewClient(opts ClientConnectOptions) (*Client, error) {
-	clientId = GenerateUUID()
 	if opts.Autorestart && opts.RestartEvery == 0 {
 		opts.RestartEvery = 10 * time.Second
 	}
+	if opts.OnDataWs == nil {
+		opts.OnDataWs = func(data map[string]any, conn *ws.Conn) error { return nil }
+	}
 	cl := &Client{
-		Id:            clientId,
+		Id:            opts.Id,
 		Autorestart:   opts.Autorestart,
 		RestartEvery:  opts.RestartEvery,
 		topicHandlers: kmap.New[string, func(map[string]any, *ClientSubscription)](false),
-		onData:        opts.OnData,
+		onDataWS:      opts.OnDataWs,
+		onId:          opts.OnId,
 		Done:          make(chan struct{}),
 	}
+	if cl.Id == "" {
+		cl.Id = GenerateUUID()
+	}
+	clientId = cl.Id
 	err := cl.connect(opts)
 	if klog.CheckError(err) {
 		return nil, err
@@ -99,6 +109,11 @@ func (client *Client) connect(opts ClientConnectOptions) error {
 		}
 	}
 	client.Conn = c
+
+	_ = c.WriteJSON(map[string]any{
+		"action": "ping",
+		"from":   client.Id,
+	})
 	client.handle()
 	klog.Printfs("client connected to %s\n", u.String())
 	return nil
@@ -106,15 +121,16 @@ func (client *Client) connect(opts ClientConnectOptions) error {
 
 func (client *Client) handle() {
 	client.handleData(func(data map[string]any, sub *ClientSubscription) {
-		if client.onData != nil {
-			client.onData(data)
+		if v, ok := data["to_id"]; ok && client.onId != nil && v.(string) == client.Id {
+			delete(data, "to_id")
+			client.onId(data, sub)
 		}
 		v1, okTopic := data["topic"]
 		eventId, okEvent := data["event_id"]
 		if okEvent {
 			client.Publish(eventId.(string), map[string]any{
-				"ok":    "done",
-				"go_id": client.Id,
+				"ok":   "done",
+				"from": client.Id,
 			})
 		}
 		found := false
@@ -340,8 +356,8 @@ func (client *Client) handleData(fn func(data map[string]any, sub *ClientSubscri
 				if DEBUG {
 					klog.Printfs("client handleData recv: %v\n", message)
 				}
-				contin := OnDataWS(message, client.Conn, nil)
-				if contin {
+				err = client.onDataWS(message, client.Conn)
+				if err == nil {
 					sub := ClientSubscription{
 						Conn: client.Conn,
 					}

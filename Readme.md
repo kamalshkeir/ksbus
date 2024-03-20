@@ -8,7 +8,7 @@ It use [Ksmux](https://github.com/kamalshkeir/ksmux)
 ## Get Started
 
 ```sh
-go get github.com/kamalshkeir/ksbus@v1.1.9
+go get github.com/kamalshkeir/ksbus@v1.2.1
 ```
 
 ## You don't know where you can use it ?, here is a simple use case example:
@@ -283,7 +283,7 @@ OnServersData = func(data any, conn *ws.Conn) {} // when recv data from other se
 
 ## Example Python Client
 ```sh
-pip install ksbus==1.2.1
+pip install ksbus==1.2.3
 ```
 
 With FastApi example:

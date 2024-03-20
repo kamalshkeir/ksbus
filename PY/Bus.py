@@ -46,7 +46,7 @@ class Bus:
             async for message in self.conn:
                 obj = json.loads(message)
                 if self.OnDataWs is not None:
-                    self.OnDataWs(obj)
+                    self.OnDataWs(obj,self.conn)
                 if "event_id" in obj:
                     self.Publish(obj["event_id"], {"ok": "done", "from": self.id, "event_id":obj["event_id"]})
                 if "to_id" in obj:

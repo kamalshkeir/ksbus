@@ -283,7 +283,7 @@ OnServersData = func(data any, conn *ws.Conn) {} // when recv data from other se
 
 ## Example Python Client
 ```sh
-pip install ksbus==1.2.3
+pip install ksbus==1.2.4
 ```
 
 With FastApi example:

@@ -155,7 +155,7 @@ class Bus {
             done = true;
             if (onRecv) {
                 onRecv(data);
-                ch.Unsubscribe()
+                ch.Unsubscribe();
             }
         });
         this.Publish(topic, data);

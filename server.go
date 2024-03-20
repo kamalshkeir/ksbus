@@ -94,7 +94,7 @@ func (s *Server) PublishToID(id string, data map[string]any) {
 	s.publishWSToID(id, data)
 }
 
-func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, ch Channel), onExpire func(eventId string, topic string)) {
+func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, topic string)) {
 	if _, ok := data["from"]; !ok {
 		data["from"] = s.ID
 	}
@@ -106,7 +106,8 @@ func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(
 	s.Subscribe(eventId, func(data map[string]any, ch Channel) {
 		done <- struct{}{}
 		if onRecv != nil {
-			onRecv(data, ch)
+			onRecv(data)
+			ch.Unsubscribe()
 		}
 	})
 	s.Publish(topic, data)
@@ -124,7 +125,7 @@ free:
 	}
 }
 
-func (s *Server) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any, ch Channel), onExpire func(eventId string, toID string)) {
+func (s *Server) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, toID string)) {
 	if _, ok := data["from"]; !ok {
 		data["from"] = s.ID
 	}
@@ -135,7 +136,8 @@ func (s *Server) PublishToIDWaitRecv(id string, data map[string]any, onRecv func
 	s.Subscribe(eventId, func(data map[string]any, ch Channel) {
 		done <- struct{}{}
 		if onRecv != nil {
-			onRecv(data, ch)
+			onRecv(data)
+			ch.Unsubscribe()
 		}
 	})
 	s.PublishToID(id, data)

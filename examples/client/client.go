@@ -36,9 +36,8 @@ func main() {
 
 	client.PublishToIDWaitRecv("browser", map[string]any{
 		"data": "hello from go client",
-	}, func(data map[string]any, sub *ksbus.ClientSubscription) {
+	}, func(data map[string]any) {
 		fmt.Println("onRecv:", data)
-		sub.Unsubscribe()
 	}, func(eventId, id string) {
 		fmt.Println("not received:", eventId, id)
 	})

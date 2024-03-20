@@ -220,7 +220,7 @@ func (client *Client) PublishToID(id string, data map[string]any) {
 	_ = client.Conn.WriteJSON(data)
 }
 
-func (client *Client) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, sub *ClientSubscription), onExpire func(eventId string, topic string)) {
+func (client *Client) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, topic string)) {
 	eventId := GenerateUUID()
 	data["from"] = client.Id
 	data["event_id"] = eventId
@@ -230,7 +230,8 @@ func (client *Client) PublishWaitRecv(topic string, data map[string]any, onRecv 
 	client.Subscribe(eventId, func(data map[string]any, sub *ClientSubscription) {
 		done <- struct{}{}
 		if onRecv != nil {
-			onRecv(data, sub)
+			onRecv(data)
+			sub.Unsubscribe()
 		}
 	})
 	client.Publish(topic, data)
@@ -248,7 +249,7 @@ free:
 	}
 }
 
-func (client *Client) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any, sub *ClientSubscription), onExpire func(eventId string, id string)) {
+func (client *Client) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, id string)) {
 	eventId := GenerateUUID()
 	data["from"] = client.Id
 	data["event_id"] = eventId
@@ -258,7 +259,8 @@ func (client *Client) PublishToIDWaitRecv(id string, data map[string]any, onRecv
 	client.Subscribe(eventId, func(data map[string]any, sub *ClientSubscription) {
 		done <- struct{}{}
 		if onRecv != nil {
-			onRecv(data, sub)
+			onRecv(data)
+			sub.Unsubscribe()
 		}
 	})
 	client.PublishToID(id, data)

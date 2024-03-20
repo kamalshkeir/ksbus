@@ -8,7 +8,7 @@ It use [Ksmux](https://github.com/kamalshkeir/ksmux)
 ## Get Started
 
 ```sh
-go get github.com/kamalshkeir/ksbus@v1.2.2
+go get github.com/kamalshkeir/ksbus@v1.2.3
 ```
 
 ## You don't know where you can use it ?, here is a simple use case example:

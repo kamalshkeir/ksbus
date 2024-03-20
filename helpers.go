@@ -225,9 +225,11 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 				})
 			}
 		case "server_message", "serverMessage":
-			if data, ok := m["data"]; ok {
-				if addr, ok := m["addr"]; ok && strings.Contains(addr.(string), LocalAddress) {
-					OnServersData(data, conn)
+			if server.onServerData != nil {
+				if data, ok := m["data"]; ok {
+					if addr, ok := m["addr"]; ok && strings.Contains(addr.(string), LocalAddress) {
+						server.onServerData(data, conn)
+					}
 				}
 			}
 		case "pub_id":
@@ -270,7 +272,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					}
 					if addr, ok := m["addr"].(string); ok {
 						if strings.Contains(addr, LocalAddress) {
-							OnServersData(mm, conn)
+							server.onServerData(mm, conn)
 							return
 						}
 					}
@@ -282,7 +284,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 				case map[string]any:
 					if addr, ok := m["addr"].(string); ok {
 						if strings.Contains(addr, LocalAddress) {
-							OnServersData(m, conn)
+							server.onServerData(m, conn)
 							return
 						}
 					}

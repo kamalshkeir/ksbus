@@ -8,7 +8,7 @@ It use [Ksmux](https://github.com/kamalshkeir/ksmux)
 ## Get Started
 
 ```sh
-go get github.com/kamalshkeir/ksbus@v1.2.3
+go get github.com/kamalshkeir/ksbus@v1.2.4
 ```
 
 ## You don't know where you can use it ?, here is a simple use case example:
@@ -283,7 +283,7 @@ OnServersData = func(data any, conn *ws.Conn) {} // when recv data from other se
 
 ## Example Python Client
 ```sh
-pip install ksbus==1.2.4
+pip install ksbus==1.2.6
 ```
 
 With FastApi example:
@@ -334,12 +334,27 @@ Pure Python example
 ```py
 from ksbus import Bus
 
+
+# pythonTopicHandler handle topic 'python'
+async def pythonTopicHandler(data,subs):
+    print("recv on topic python:",data)
+    # Unsubscribe
+    #await subs.Unsubscribe()
+
+def OnId(data):
+    print("OnId:",data)
+
 def OnOpen(bus):
     print("connected",bus)
-    bus.Publish("server",{
+    bus.PublishToIDWaitRecv("browser",{
         "data":"hi from pure python"
-    })
+    },lambda data:print("OnRecv:",data),lambda event_id:print("OnFail:",event_id))
 
 if __name__ == '__main__':
-    Bus("localhost:9313",block=True,onOpen=OnOpen)
+    Bus({
+        'id': 'py',
+        'addr': 'localhost:9313',
+        'OnId': OnId,
+        'OnOpen':OnOpen},
+        block=True)
 ```

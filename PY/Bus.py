@@ -49,15 +49,13 @@ class Bus:
                     self.OnDataWs(obj,self.conn)
                 if "event_id" in obj:
                     self.Publish(obj["event_id"], {"ok": "done", "from": self.id, "event_id":obj["event_id"]})
-                if "to_id" in obj:
+                if "to_id" in obj and obj["to_id"] == self.id:
                     if self.OnId is not None:
                         self.OnId(obj)
                 elif "topic" in obj:
                     if obj["topic"] in self.topic_handlers:
                         subs = BusSubscription(self, obj["topic"])
                         self.topic_handlers[obj["topic"]](obj, subs)
-                    else:
-                        print(f"topicHandler not found for: {obj['topic']}")
                 elif "data" in obj and obj["data"] == "pong":
                     if self.OnOpen is not None:
                         self.OnOpen(self)
@@ -97,9 +95,9 @@ class Bus:
         else:
             print("Publish: Not connected to server. Please check the connection.")
 
-    def PublishToID(self, topic, data):
+    def PublishToID(self, id, data):
         if self.conn is not None:
-            asyncio.create_task(self.sendMessage({"action": "pub_id", "id": self.id, "data": data, "from": self.id}))
+            asyncio.create_task(self.sendMessage({"action": "pub_id", "id": id, "data": data, "from": self.id}))
         else:
             print("PublishToID: Not connected to server. Please check the connection.")
 
@@ -118,22 +116,26 @@ class Bus:
         data["event_id"] = eventId
         done = False
 
-        self.Subscribe(eventId, lambda data, ch: self._onRecv(data, ch, onRecv, done))
-        self.Publish(topic, data)
-        asyncio.create_task(self._setExpireTimer(eventId, onExpire))
-
-    async def _setExpireTimer(self, eventId, onExpire):
-        await asyncio.sleep(0.5)
-        if not self.topic_handlers.get(eventId):
-            if onExpire:
-                onExpire(eventId)
-
-    def _onRecv(self, data,ch, onRecv, done):
-        if not done:
-            done = True
-            if onRecv:
-                onRecv(data)
+        def _onRecv(data, ch):
+            nonlocal done
+            if not done:
+                done = True
+                if onRecv:
+                    onRecv(data)
                 ch.Unsubscribe()
+
+        sub = self.Subscribe(eventId, lambda data, ch: _onRecv(data, ch))
+        
+        async def expireTimer(eventId):
+            await asyncio.sleep(0.5)  # Adjust the timeout as needed
+            if not done:
+                if onExpire:
+                    onExpire(eventId, topic)
+                sub.Unsubscribe()
+        
+        self.Publish(topic, data)
+        asyncio.create_task(expireTimer(eventId))
+
 
     def PublishToIDWaitRecv(self, id, data, onRecv, onExpire):
         data["from"] = self.id
@@ -142,9 +144,26 @@ class Bus:
         data["event_id"] = eventId
         done = False
 
-        self.Subscribe(eventId, lambda data, ch: self._onRecv(data, ch, onRecv, done))
+        def _onRecv(data, ch):
+            nonlocal done
+            if not done:
+                done = True
+                if onRecv:
+                    onRecv(data)
+                ch.Unsubscribe()
+
+        sub = self.Subscribe(eventId, lambda data, ch: _onRecv(data, ch))
+
+        async def expireTimer(eventId):
+            await asyncio.sleep(0.5)  # Adjust the timeout as needed
+            if not done:
+                if onExpire:
+                    onExpire(eventId)
+                sub.Unsubscribe()
+
+        
         self.PublishToID(id, data)
-        asyncio.create_task(self._setExpireTimer(eventId, onExpire))
+        asyncio.create_task(expireTimer(eventId))
 
     def PublishToServer(self, addr, data, secure):
         self.conn.send(json.dumps({

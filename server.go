@@ -44,7 +44,7 @@ func (s *Server) OnServerData(fn func(data any, conn *ws.Conn)) {
 	s.onServerData = fn
 }
 
-func (s *Server) OnDataWS(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error) {
+func (s *Server) OnDataWs(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error) {
 	s.onDataWS = fn
 }
 func (s *Server) OnId(fn func(data map[string]any)) {

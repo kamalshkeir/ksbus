@@ -18,7 +18,7 @@ func main() {
 	app.LocalStatics("../JS", "/js")
 	klog.CheckError(app.LocalTemplates("../temps"))
 
-	bus.OnDataWS(func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error {
+	bus.OnDataWs(func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error {
 		fmt.Println("srv OnDataWS:", data)
 		return nil
 	})

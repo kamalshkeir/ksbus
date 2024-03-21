@@ -227,12 +227,12 @@ func (client *Client) PublishWaitRecv(topic string, data map[string]any, onRecv 
 	data["topic"] = topic
 	done := make(chan struct{})
 
-	client.Subscribe(eventId, func(data map[string]any, sub *ClientSubscription) {
+	cs := client.Subscribe(eventId, func(data map[string]any, sub *ClientSubscription) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
-			sub.Unsubscribe()
 		}
+		sub.Unsubscribe()
 	})
 	client.Publish(topic, data)
 free:
@@ -244,6 +244,7 @@ free:
 			if onExpire != nil {
 				onExpire(eventId, topic)
 			}
+			cs.Unsubscribe()
 			break free
 		}
 	}
@@ -256,12 +257,12 @@ func (client *Client) PublishToIDWaitRecv(id string, data map[string]any, onRecv
 	data["id"] = id
 	done := make(chan struct{})
 
-	client.Subscribe(eventId, func(data map[string]any, sub *ClientSubscription) {
+	cs := client.Subscribe(eventId, func(data map[string]any, sub *ClientSubscription) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
-			sub.Unsubscribe()
 		}
+		sub.Unsubscribe()
 	})
 	client.PublishToID(id, data)
 free:
@@ -273,6 +274,7 @@ free:
 			if onExpire != nil {
 				onExpire(eventId, id)
 			}
+			cs.Unsubscribe()
 			break free
 		}
 	}

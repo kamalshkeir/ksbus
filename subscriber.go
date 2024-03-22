@@ -2,6 +2,10 @@ package ksbus
 
 import "github.com/kamalshkeir/ksmux/ws"
 
+type Unsub interface {
+	Unsubscribe()
+}
+
 type Subscriber struct {
 	bus   *Bus
 	Id    string

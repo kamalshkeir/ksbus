@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Index</title>
+</head>
+
+<body>
+    <h1>Index</h1>
+    <input type="text" id="inpp">
+    <button type="button" id="btn">Send</button>
+    <script src="/js/Bus.js"></script>
+    <script>
+        let bus = new Bus({ id: "browser" });
+        bus.OnId = (d) => {
+            console.log("OnId", d)
+        }
+        bus.OnDataWS = (d, wsConn) => {
+            console.log("OnData", d)
+        }
+        bus.OnOpen = () => {
+            console.log("connected", bus.id)
+            btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                bus.PublishToIDWaitRecv(inpp.value, { "cxwcwxcc": "hi from browser" }, (data) => {
+                    console.log("onRecv:", data)
+                }, (eventID, id) => {
+                    console.log(`${id} did not receive ${eventID}`);
+                })
+            })
+        }
+    </script>
+</body>
+
+</html>

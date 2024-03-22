@@ -15,8 +15,8 @@ func main() {
 
 	app := bus.App
 
-	app.LocalStatics("../JS", "/js")
-	klog.CheckError(app.LocalTemplates("../temps"))
+	app.LocalStatics("JS", "/js")
+	klog.CheckError(app.LocalTemplates("examples/client-js"))
 
 	bus.OnDataWs(func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error {
 		fmt.Println("srv OnDataWS:", data)
@@ -27,8 +27,9 @@ func main() {
 		fmt.Println("srv OnId:", data)
 	})
 
-	bus.Subscribe("server1", func(data map[string]any, ch ksbus.Subscriber) {
-		_ = data
+	bus.Subscribe("server1", func(data map[string]any, unsub ksbus.Unsub) {
+		fmt.Println(data)
+		// unsub.Unsubscribe()
 	})
 
 	app.Get("/", func(c *ksmux.Context) {

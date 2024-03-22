@@ -16,7 +16,7 @@ func main() {
 			fmt.Println("ON OnDataWs:", data)
 			return nil
 		},
-		OnId: func(data map[string]any, subs *ksbus.Subscriber) {
+		OnId: func(data map[string]any, subs ksbus.Unsub) {
 			fmt.Println("ON OnId:", data)
 		},
 	})
@@ -26,7 +26,7 @@ func main() {
 
 	fmt.Println("CLIENT connected as", client.Id)
 
-	client.Subscribe("go-client", func(data map[string]any, sub *ksbus.Subscriber) {
+	client.Subscribe("go-client", func(data map[string]any, sub ksbus.Unsub) {
 		fmt.Println("ON sub go-client:", data)
 	})
 

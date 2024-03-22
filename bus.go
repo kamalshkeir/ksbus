@@ -41,8 +41,8 @@ func New() *Bus {
 	}
 }
 
-func (b *Bus) Subscribe(topic string, fn func(data map[string]any, sub Subscriber), onData ...func(data map[string]any)) (sub Subscriber) {
-	sub = Subscriber{
+func (b *Bus) Subscribe(topic string, fn func(data map[string]any, unsub Unsub), onData ...func(data map[string]any)) Unsub {
+	sub := Subscriber{
 		Id:    "INTERNAL",
 		Topic: topic,
 		Ch:    make(chan map[string]any),
@@ -126,12 +126,12 @@ func (b *Bus) PublishWaitRecv(topic string, data map[string]any, onRecv func(dat
 	eventId := GenerateUUID()
 	data["event_id"] = eventId
 	done := make(chan struct{})
-	subs := b.Subscribe(eventId, func(data map[string]any, sub Subscriber) {
+	subs := b.Subscribe(eventId, func(data map[string]any, unsub Unsub) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
 		}
-		sub.Unsubscribe()
+		unsub.Unsubscribe()
 	})
 	err := b.Publish(topic, data)
 	if err != nil {
@@ -166,12 +166,12 @@ func (b *Bus) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(da
 	data["event_id"] = eventId
 	done := make(chan struct{})
 
-	subs := b.Subscribe(eventId, func(data map[string]any, ch Subscriber) {
+	subs := b.Subscribe(eventId, func(data map[string]any, unsub Unsub) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
 		}
-		ch.Unsubscribe()
+		unsub.Unsubscribe()
 	})
 	err := b.PublishToID(id, data)
 	if err != nil {

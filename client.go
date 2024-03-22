@@ -16,12 +16,12 @@ type Client struct {
 	Id            string
 	ServerAddr    string
 	onDataWS      func(data map[string]any, conn *ws.Conn) error
-	onId          func(data map[string]any, subs *Subscriber)
+	onId          func(data map[string]any, unsub Unsub)
 	RestartEvery  time.Duration
 	Conn          *ws.Conn
 	Autorestart   bool
 	Done          chan struct{}
-	topicHandlers *kmap.SafeMap[string, func(map[string]any, *Subscriber)]
+	topicHandlers *kmap.SafeMap[string, func(map[string]any, Unsub)]
 }
 
 type ClientConnectOptions struct {
@@ -32,7 +32,7 @@ type ClientConnectOptions struct {
 	Autorestart  bool
 	RestartEvery time.Duration
 	OnDataWs     func(data map[string]any, conn *ws.Conn) error
-	OnId         func(data map[string]any, subs *Subscriber) // used when client bus receive data on his ID 'client.Id'
+	OnId         func(data map[string]any, unsub Unsub) // used when client bus receive data on his ID 'client.Id'
 }
 
 func NewClient(opts ClientConnectOptions) (*Client, error) {
@@ -46,7 +46,7 @@ func NewClient(opts ClientConnectOptions) (*Client, error) {
 		Id:            opts.Id,
 		Autorestart:   opts.Autorestart,
 		RestartEvery:  opts.RestartEvery,
-		topicHandlers: kmap.New[string, func(map[string]any, *Subscriber)](false),
+		topicHandlers: kmap.New[string, func(map[string]any, Unsub)](false),
 		onDataWS:      opts.OnDataWs,
 		onId:          opts.OnId,
 		Done:          make(chan struct{}),
@@ -139,7 +139,7 @@ func (client *Client) handle() {
 	})
 }
 
-func (client *Client) Subscribe(topic string, handler func(data map[string]any, sub *Subscriber)) *Subscriber {
+func (client *Client) Subscribe(topic string, handler func(data map[string]any, unsub Unsub)) Unsub {
 	id := client.Id
 	data := map[string]any{
 		"action": "sub",
@@ -218,12 +218,12 @@ func (client *Client) PublishWaitRecv(topic string, data map[string]any, onRecv 
 	data["topic"] = topic
 	done := make(chan struct{})
 
-	cs := client.Subscribe(eventId, func(data map[string]any, sub *Subscriber) {
+	cs := client.Subscribe(eventId, func(data map[string]any, unsub Unsub) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
 		}
-		sub.Unsubscribe()
+		unsub.Unsubscribe()
 	})
 	client.Publish(topic, data)
 free:
@@ -248,12 +248,12 @@ func (client *Client) PublishToIDWaitRecv(id string, data map[string]any, onRecv
 	data["id"] = id
 	done := make(chan struct{})
 
-	cs := client.Subscribe(eventId, func(data map[string]any, sub *Subscriber) {
+	cs := client.Subscribe(eventId, func(data map[string]any, unsub Unsub) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
 		}
-		sub.Unsubscribe()
+		unsub.Unsubscribe()
 	})
 	client.PublishToID(id, data)
 free:

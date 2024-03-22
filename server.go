@@ -57,7 +57,7 @@ func (s *Server) WithMetrics(httpHandler http.Handler, path ...string) {
 	s.App.WithMetrics(httpHandler, path...)
 }
 
-func (s *Server) Subscribe(topic string, fn func(data map[string]any, ch Subscriber)) (ch Subscriber) {
+func (s *Server) Subscribe(topic string, fn func(data map[string]any, unsub Unsub)) (unsub Unsub) {
 	if DEBUG {
 		klog.Printfs("grSubscribing to topic %s\n", topic)
 	}
@@ -112,12 +112,12 @@ func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(
 	data["event_id"] = eventId
 	done := make(chan struct{})
 
-	subs := s.Subscribe(eventId, func(data map[string]any, ch Subscriber) {
+	subs := s.Subscribe(eventId, func(data map[string]any, unsub Unsub) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
 		}
-		ch.Unsubscribe()
+		unsub.Unsubscribe()
 	})
 	err := s.Publish(topic, data)
 	if err != nil {
@@ -151,12 +151,12 @@ func (s *Server) PublishToIDWaitRecv(id string, data map[string]any, onRecv func
 	data["event_id"] = eventId
 	done := make(chan struct{})
 
-	subs := s.Subscribe(eventId, func(data map[string]any, ch Subscriber) {
+	subs := s.Subscribe(eventId, func(data map[string]any, unsub Unsub) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
 		}
-		ch.Unsubscribe()
+		unsub.Unsubscribe()
 	})
 	err := s.PublishToID(id, data)
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 	"github.com/kamalshkeir/ksmux/ws"
 )
 
-func (s *Server) publishWS(topic string, data map[string]any) {
+func (s *Server) publishWS(topic string, data map[string]any) error {
 	s.Bus.mu.Lock()
 	defer s.Bus.mu.Unlock()
 	data["topic"] = topic
@@ -17,19 +17,10 @@ func (s *Server) publishWS(topic string, data map[string]any) {
 		for _, sub := range subscriptions {
 			_ = sub.Conn.WriteJSON(data)
 		}
+	} else {
+		return ErrNotFound
 	}
-}
-
-func (s *Server) publishWSToID(id string, data map[string]any) {
-	data["to_id"] = id
-	s.Bus.mu.Lock()
-	defer s.Bus.mu.Unlock()
-	s.allWS.Range(func(key *ws.Conn, value string) {
-		if value == id {
-			_ = key.WriteJSON(data)
-			return
-		}
-	})
+	return nil
 }
 
 func (s *Server) subscribeWS(id, topic string, conn *ws.Conn) {
@@ -76,7 +67,7 @@ func (s *Server) removeWSFromAllTopics(wsConn *ws.Conn) {
 				}
 			}
 		})
-		s.allWS.Delete(wsConn)
+		s.Bus.allWS.Delete(wsConn)
 		s.sendToServerConnections.Range(func(key string, value *ws.Conn) {
 			if value == wsConn {
 				go s.sendToServerConnections.Delete(key)
@@ -169,7 +160,12 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					}
 					if topic, ok := m["topic"]; ok {
 						mm["topic"] = topic.(string)
-						server.Publish(topic.(string), mm)
+						err := server.Publish(topic.(string), mm)
+						if err != nil {
+							_ = conn.WriteJSON(map[string]any{
+								"error": topic.(string) + err.Error(),
+							})
+						}
 					} else {
 						_ = conn.WriteJSON(map[string]any{
 							"error": "topic missing",
@@ -180,7 +176,12 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 						if from, ok := m["from"]; ok {
 							v["from"] = from
 						}
-						server.Publish(topic.(string), v)
+						err := server.Publish(topic.(string), v)
+						if err != nil {
+							_ = conn.WriteJSON(map[string]any{
+								"error": topic.(string) + err.Error(),
+							})
+						}
 					} else {
 						_ = conn.WriteJSON(map[string]any{
 							"error": "topic missing",
@@ -240,7 +241,15 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 						"data": v,
 					}
 					if id, ok := m["id"]; ok {
-						server.PublishToID(id.(string), mm)
+						if from, ok := m["from"]; ok {
+							mm["from"] = from
+						}
+						err := server.PublishToID(id.(string), mm)
+						if err != nil {
+							_ = conn.WriteJSON(map[string]any{
+								"error": id.(string) + err.Error(),
+							})
+						}
 					} else {
 						_ = conn.WriteJSON(map[string]any{
 							"error": "id missing",
@@ -251,7 +260,22 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 						if from, ok := m["from"]; ok {
 							v["from"] = from
 						}
-						server.PublishToID(id.(string), v)
+						if id.(string) == server.ID && server.onId != nil {
+							if eventID, ok := v["event_id"]; ok {
+								server.Publish(eventID.(string), map[string]any{
+									"ok":   "done",
+									"from": server.ID,
+								})
+							}
+							server.onId(v)
+							return
+						}
+						err := server.PublishToID(id.(string), v)
+						if err != nil {
+							_ = conn.WriteJSON(map[string]any{
+								"error": id.(string) + err.Error(),
+							})
+						}
 					} else {
 						_ = conn.WriteJSON(map[string]any{
 							"error": "id missing",
@@ -277,9 +301,19 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 						}
 					}
 					if secure, ok := m["secure"]; ok && secure.(bool) {
-						server.PublishToServer(m["addr"].(string), mm, true)
+						err := server.PublishToServer(m["addr"].(string), mm, true)
+						if err != nil {
+							_ = conn.WriteJSON(map[string]any{
+								"error": err.Error(),
+							})
+						}
 					} else {
-						server.PublishToServer(m["addr"].(string), mm)
+						err := server.PublishToServer(m["addr"].(string), mm)
+						if err != nil {
+							_ = conn.WriteJSON(map[string]any{
+								"error": err.Error(),
+							})
+						}
 					}
 				case map[string]any:
 					if addr, ok := m["addr"].(string); ok {
@@ -289,9 +323,19 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 						}
 					}
 					if secure, ok := m["secure"]; ok && secure.(bool) {
-						server.PublishToServer(m["addr"].(string), v, true)
+						err := server.PublishToServer(m["addr"].(string), v, true)
+						if err != nil {
+							_ = conn.WriteJSON(map[string]any{
+								"error": err.Error(),
+							})
+						}
 					} else {
-						server.PublishToServer(m["addr"].(string), v)
+						err := server.PublishToServer(m["addr"].(string), v)
+						if err != nil {
+							_ = conn.WriteJSON(map[string]any{
+								"error": err.Error(),
+							})
+						}
 					}
 				default:
 					_ = conn.WriteJSON(map[string]any{
@@ -302,13 +346,13 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 		case "ping":
 			if from, ok := m["from"].(string); ok {
 				found := false
-				for _, v := range server.allWS.Values() {
+				for _, v := range server.Bus.allWS.Values() {
 					if v == from {
 						found = true
 					}
 				}
 				if !found {
-					server.allWS.Set(conn, from)
+					server.Bus.allWS.Set(conn, from)
 				} else {
 					_ = conn.WriteJSON(map[string]any{
 						"error": "ID already exist, should be unique",

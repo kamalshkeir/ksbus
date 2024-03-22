@@ -36,9 +36,14 @@ func main() {
 	})
 
 	app.Get("/pp", func(c *ksmux.Context) {
-		bus.Bus.Publish("server1", map[string]any{
-			"data": "INTERNAL hello",
+		err := bus.Bus.PublishToIDWaitRecv("browser", map[string]any{
+			"data": "hello from INTERNAL",
+		}, func(data map[string]any) {
+			fmt.Println("pp OnRecv:", data)
+		}, func(_, id string) {
+			fmt.Println("FAILED", id)
 		})
+		klog.CheckError(err)
 		c.Text("ok")
 	})
 

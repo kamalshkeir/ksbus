@@ -19,7 +19,6 @@ type Server struct {
 	onServerData            func(data any, conn *ws.Conn)
 	onId                    func(data map[string]any)
 	sendToServerConnections *kmap.SafeMap[string, *ws.Conn]
-	allWS                   *kmap.SafeMap[*ws.Conn, string]
 }
 
 func NewServer(bus ...*Bus) *Server {
@@ -35,7 +34,6 @@ func NewServer(bus ...*Bus) *Server {
 		Bus:                     b,
 		App:                     app,
 		sendToServerConnections: kmap.New[string, *ws.Conn](false),
-		allWS:                   kmap.New[*ws.Conn, string](false),
 	}
 	return &server
 }
@@ -65,7 +63,7 @@ func (s *Server) Subscribe(topic string, fn func(data map[string]any, ch Channel
 	}
 	return s.Bus.Subscribe(topic, fn, func(data map[string]any) {
 		if eventID, ok := data["event_id"]; ok {
-			s.Publish(eventID.(string), map[string]any{
+			_ = s.Publish(eventID.(string), map[string]any{
 				"ok":   "done",
 				"from": s.ID,
 			})
@@ -79,27 +77,27 @@ func (s *Server) Unsubscribe(ch Channel) {
 	}
 }
 
-func (s *Server) Publish(topic string, data map[string]any) {
+func (s *Server) Publish(topic string, data map[string]any) error {
 	if _, ok := data["from"]; !ok {
 		data["from"] = s.ID
 	}
-	s.publishWS(topic, data)
-	s.Bus.Publish(topic, data)
+	err1 := s.publishWS(topic, data)
+	err2 := s.Bus.Publish(topic, data)
+	if err1 != nil && err2 != nil {
+		return err1
+	}
+	return nil
 }
 
-func (s *Server) PublishToID(id string, data map[string]any) {
+func (s *Server) PublishToID(id string, data map[string]any) error {
 	if _, ok := data["from"]; !ok {
 		data["from"] = s.ID
 	}
-	if id == s.ID && s.onId != nil {
-		s.onId(data)
-		return
-	}
 
-	s.publishWSToID(id, data)
+	return s.Bus.PublishToID(id, data)
 }
 
-func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, topic string)) {
+func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, topic string)) error {
 	if _, ok := data["from"]; !ok {
 		data["from"] = s.ID
 	}
@@ -108,14 +106,21 @@ func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(
 	data["event_id"] = eventId
 	done := make(chan struct{})
 
-	s.Subscribe(eventId, func(data map[string]any, ch Channel) {
+	subs := s.Subscribe(eventId, func(data map[string]any, ch Channel) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
-			ch.Unsubscribe()
 		}
+		ch.Unsubscribe()
 	})
-	s.Publish(topic, data)
+	err := s.Publish(topic, data)
+	if err != nil {
+		if onExpire != nil {
+			onExpire(eventId, topic)
+		}
+		subs.Unsubscribe()
+		return err
+	}
 free:
 	for {
 		select {
@@ -125,12 +130,14 @@ free:
 			if onExpire != nil {
 				onExpire(eventId, topic)
 			}
+			subs.Unsubscribe()
 			break free
 		}
 	}
+	return nil
 }
 
-func (s *Server) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, toID string)) {
+func (s *Server) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, toID string)) error {
 	if _, ok := data["from"]; !ok {
 		data["from"] = s.ID
 	}
@@ -138,14 +145,21 @@ func (s *Server) PublishToIDWaitRecv(id string, data map[string]any, onRecv func
 	data["event_id"] = eventId
 	done := make(chan struct{})
 
-	s.Subscribe(eventId, func(data map[string]any, ch Channel) {
+	subs := s.Subscribe(eventId, func(data map[string]any, ch Channel) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
-			ch.Unsubscribe()
 		}
+		ch.Unsubscribe()
 	})
-	s.PublishToID(id, data)
+	err := s.PublishToID(id, data)
+	if err != nil {
+		if onExpire != nil {
+			onExpire(eventId, id)
+		}
+		subs.Unsubscribe()
+		return err
+	}
 free:
 	for {
 		select {
@@ -155,9 +169,11 @@ free:
 			if onExpire != nil {
 				onExpire(eventId, id)
 			}
+			subs.Unsubscribe()
 			break free
 		}
 	}
+	return nil
 }
 
 func (s *Server) RemoveTopic(topic string) {
@@ -167,7 +183,7 @@ func (s *Server) RemoveTopic(topic string) {
 	s.Bus.RemoveTopic(topic)
 }
 
-func (s *Server) PublishToServer(addr string, data map[string]any, secure ...bool) {
+func (s *Server) PublishToServer(addr string, data map[string]any, secure ...bool) error {
 	if DEBUG {
 		klog.Printfs("grSendToServer: sending %v on %s \n", data, addr)
 	}
@@ -183,7 +199,7 @@ func (s *Server) PublishToServer(addr string, data map[string]any, secure ...boo
 		conn, _, err = ws.DefaultDialer.Dial(u.String(), nil)
 		if err != nil {
 			klog.Printfs("rdSendToServer Dial %s error:%v\n", u.String(), err)
-			return
+			return err
 		}
 	}
 	dd := map[string]any{
@@ -194,8 +210,9 @@ func (s *Server) PublishToServer(addr string, data map[string]any, secure ...boo
 	}
 	if err := conn.WriteJSON(dd); err != nil {
 		klog.Printfs("rdSendToServer WriteJSON on %s error:%v\n", u.String(), err)
-		return
+		return err
 	}
+	return nil
 }
 
 // RUN

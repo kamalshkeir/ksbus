@@ -17,14 +17,17 @@ package ksbus
 
 import (
 	"sync"
+	"time"
 
 	"github.com/kamalshkeir/kmap"
+	"github.com/kamalshkeir/ksmux/ws"
 )
 
 // Bus type handle all subscriptions, websockets and channels
 type Bus struct {
 	subscribers   *kmap.SafeMap[string, []Channel]
 	wsSubscribers *kmap.SafeMap[string, []ClientSubscription]
+	allWS         *kmap.SafeMap[*ws.Conn, string]
 	mu            sync.Mutex
 }
 
@@ -33,6 +36,7 @@ func New() *Bus {
 	return &Bus{
 		subscribers:   kmap.New[string, []Channel](false),
 		wsSubscribers: kmap.New[string, []ClientSubscription](false),
+		allWS:         kmap.New[*ws.Conn, string](false),
 	}
 }
 
@@ -77,24 +81,10 @@ func (b *Bus) Unsubscribe(ch Channel) {
 	close(ch.Ch)
 }
 
-// func (b *Bus) UnsubscribeId(topic, id string) {
-// 	// add sub
-// 	chns := Channel{}
-// 	if subs, found := b.subscribers.Get(topic); found {
-// 		for i, sub := range subs {
-// 			if sub.Id == id && sub.Topic == topic {
-// 				chns = sub
-// 				subs = append(subs[:i], subs[i+1:]...)
-// 			}
-// 		}
-// 		b.mu.Lock()
-// 		b.subscribers.Set(topic, subs)
-// 		b.mu.Unlock()
-// 	}
-// 	close(chns.Ch)
-// }
-
-func (b *Bus) Publish(topic string, data map[string]any) {
+func (b *Bus) Publish(topic string, data map[string]any) error {
+	if _, ok := data["from"]; !ok {
+		data["from"] = "INTERNAL"
+	}
 	data["topic"] = topic
 	if chans, found := b.subscribers.Get(topic); found {
 		channels := append([]Channel{}, chans...)
@@ -103,35 +93,111 @@ func (b *Bus) Publish(topic string, data map[string]any) {
 				ch.Ch <- data
 			}
 		}()
+	} else {
+		return ErrNotFound
 	}
+	return nil
 }
 
-// func (b *Bus) PublishToID(id string, data map[string]any) {
-// 	data["id"] = id
-// 	b.subscribers.Range(func(_ string, value []Channel) {
-// 		for i := range value {
-// 			if value[i].Id == id {
-// 				channels := append([]Channel{}, value...)
-// 				go func() {
-// 					for _, ch := range channels {
-// 						ch.Ch <- data
-// 					}
-// 				}()
-// 				return
-// 			}
-
-// 		}
-// 	})
-// }
-
-func (b *Bus) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, ch Channel)) {
-	data["topic"] = topic
-	eventId := GenerateRandomString(12)
-	data["event_id"] = eventId
-	b.Publish(topic, data)
-	b.Subscribe(eventId, func(data map[string]any, ch Channel) {
-		onRecv(data, ch)
+func (b *Bus) PublishToID(id string, data map[string]any) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if _, ok := data["from"]; !ok {
+		data["from"] = "INTERNAL"
+	}
+	data["to_id"] = id
+	found := false
+	b.allWS.Range(func(key *ws.Conn, value string) {
+		if value == id {
+			found = true
+			_ = key.WriteJSON(data)
+			return
+		}
 	})
+	if !found {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (b *Bus) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, topic string)) error {
+	if _, ok := data["from"]; !ok {
+		data["from"] = "INTERNAL"
+	}
+	data["topic"] = topic
+	eventId := GenerateUUID()
+	data["event_id"] = eventId
+	done := make(chan struct{})
+
+	subs := b.Subscribe(eventId, func(data map[string]any, ch Channel) {
+		done <- struct{}{}
+		if onRecv != nil {
+			onRecv(data)
+		}
+		ch.Unsubscribe()
+	})
+	err := b.Publish(topic, data)
+	if err != nil {
+		if onExpire != nil {
+			onExpire(eventId, topic)
+		}
+		subs.Unsubscribe()
+		return err
+	}
+free:
+	for {
+		select {
+		case <-done:
+			break free
+		case <-time.After(500 * time.Millisecond):
+			if onExpire != nil {
+				onExpire(eventId, topic)
+			}
+			subs.Unsubscribe()
+			break free
+		}
+	}
+	return nil
+}
+
+func (b *Bus) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, id string)) error {
+	if _, ok := data["from"]; !ok {
+		data["from"] = "INTERNAL"
+	}
+	data["id"] = id
+	eventId := GenerateUUID()
+	data["event_id"] = eventId
+	done := make(chan struct{})
+
+	subs := b.Subscribe(eventId, func(data map[string]any, ch Channel) {
+		done <- struct{}{}
+		if onRecv != nil {
+			onRecv(data)
+		}
+		ch.Unsubscribe()
+	})
+	err := b.PublishToID(id, data)
+	if err != nil {
+		if onExpire != nil {
+			onExpire(eventId, id)
+		}
+		subs.Unsubscribe()
+		return err
+	}
+free:
+	for {
+		select {
+		case <-done:
+			break free
+		case <-time.After(500 * time.Millisecond):
+			if onExpire != nil {
+				onExpire(eventId, id)
+			}
+			subs.Unsubscribe()
+			break free
+		}
+	}
+	return nil
 }
 
 func (b *Bus) RemoveTopic(topic string) {

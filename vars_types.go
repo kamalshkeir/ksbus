@@ -1,6 +1,7 @@
 package ksbus
 
 import (
+	"errors"
 	"net/http"
 )
 
@@ -12,4 +13,5 @@ var (
 	ServerPath    = "/ws/bus"
 	LocalAddress  = ""
 	OnUpgradeWS   = func(r *http.Request) bool { return true }
+	ErrNotFound   = errors.New("not found")
 )

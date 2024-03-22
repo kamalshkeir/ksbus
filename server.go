@@ -57,7 +57,7 @@ func (s *Server) WithMetrics(httpHandler http.Handler, path ...string) {
 	s.App.WithMetrics(httpHandler, path...)
 }
 
-func (s *Server) Subscribe(topic string, fn func(data map[string]any, ch Channel)) (ch Channel) {
+func (s *Server) Subscribe(topic string, fn func(data map[string]any, ch Subscriber)) (ch Subscriber) {
 	if DEBUG {
 		klog.Printfs("grSubscribing to topic %s\n", topic)
 	}
@@ -71,20 +71,27 @@ func (s *Server) Subscribe(topic string, fn func(data map[string]any, ch Channel
 	})
 }
 
-func (s *Server) Unsubscribe(ch Channel) {
-	if ch.Ch != nil {
-		s.Bus.Unsubscribe(ch)
-	}
+func (s *Server) Unsubscribe(topic string) {
+	s.Bus.Unsubscribe(topic)
 }
 
-func (s *Server) Publish(topic string, data map[string]any) error {
+func (srv *Server) Publish(topic string, data map[string]any) error {
 	if _, ok := data["from"]; !ok {
-		data["from"] = s.ID
+		data["from"] = srv.ID
 	}
-	err1 := s.publishWS(topic, data)
-	err2 := s.Bus.Publish(topic, data)
-	if err1 != nil && err2 != nil {
-		return err1
+	data["topic"] = topic
+	if subs, ok := srv.Bus.topicSubscribers.Get(topic); ok {
+		for _, s := range subs {
+			if s.Ch != nil {
+				s.Ch <- data
+			} else {
+				srv.Bus.mu.Lock()
+				defer srv.Bus.mu.Unlock()
+				return s.Conn.WriteJSON(data)
+			}
+		}
+	} else {
+		return ErrNotFound
 	}
 	return nil
 }
@@ -93,7 +100,6 @@ func (s *Server) PublishToID(id string, data map[string]any) error {
 	if _, ok := data["from"]; !ok {
 		data["from"] = s.ID
 	}
-
 	return s.Bus.PublishToID(id, data)
 }
 
@@ -106,7 +112,7 @@ func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(
 	data["event_id"] = eventId
 	done := make(chan struct{})
 
-	subs := s.Subscribe(eventId, func(data map[string]any, ch Channel) {
+	subs := s.Subscribe(eventId, func(data map[string]any, ch Subscriber) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
@@ -145,7 +151,7 @@ func (s *Server) PublishToIDWaitRecv(id string, data map[string]any, onRecv func
 	data["event_id"] = eventId
 	done := make(chan struct{})
 
-	subs := s.Subscribe(eventId, func(data map[string]any, ch Channel) {
+	subs := s.Subscribe(eventId, func(data map[string]any, ch Subscriber) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
@@ -177,9 +183,6 @@ free:
 }
 
 func (s *Server) RemoveTopic(topic string) {
-	if DEBUG {
-		klog.Printfs("grRemoving topic %s\n", topic)
-	}
 	s.Bus.RemoveTopic(topic)
 }
 

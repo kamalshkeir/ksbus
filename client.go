@@ -16,18 +16,12 @@ type Client struct {
 	Id            string
 	ServerAddr    string
 	onDataWS      func(data map[string]any, conn *ws.Conn) error
-	onId          func(data map[string]any, subs *ClientSubscription)
+	onId          func(data map[string]any, subs *Subscriber)
 	RestartEvery  time.Duration
 	Conn          *ws.Conn
 	Autorestart   bool
 	Done          chan struct{}
-	topicHandlers *kmap.SafeMap[string, func(map[string]any, *ClientSubscription)]
-}
-
-type ClientSubscription struct {
-	Id    string
-	Topic string
-	Conn  *ws.Conn
+	topicHandlers *kmap.SafeMap[string, func(map[string]any, *Subscriber)]
 }
 
 type ClientConnectOptions struct {
@@ -38,10 +32,8 @@ type ClientConnectOptions struct {
 	Autorestart  bool
 	RestartEvery time.Duration
 	OnDataWs     func(data map[string]any, conn *ws.Conn) error
-	OnId         func(data map[string]any, subs *ClientSubscription) // used when client bus receive data on his ID 'client.Id'
+	OnId         func(data map[string]any, subs *Subscriber) // used when client bus receive data on his ID 'client.Id'
 }
-
-var clientId string
 
 func NewClient(opts ClientConnectOptions) (*Client, error) {
 	if opts.Autorestart && opts.RestartEvery == 0 {
@@ -54,7 +46,7 @@ func NewClient(opts ClientConnectOptions) (*Client, error) {
 		Id:            opts.Id,
 		Autorestart:   opts.Autorestart,
 		RestartEvery:  opts.RestartEvery,
-		topicHandlers: kmap.New[string, func(map[string]any, *ClientSubscription)](false),
+		topicHandlers: kmap.New[string, func(map[string]any, *Subscriber)](false),
 		onDataWS:      opts.OnDataWs,
 		onId:          opts.OnId,
 		Done:          make(chan struct{}),
@@ -62,7 +54,6 @@ func NewClient(opts ClientConnectOptions) (*Client, error) {
 	if cl.Id == "" {
 		cl.Id = GenerateUUID()
 	}
-	clientId = cl.Id
 	err := cl.connect(opts)
 	if klog.CheckError(err) {
 		return nil, err
@@ -120,7 +111,7 @@ func (client *Client) connect(opts ClientConnectOptions) error {
 }
 
 func (client *Client) handle() {
-	client.handleData(func(data map[string]any, sub *ClientSubscription) {
+	client.handleData(func(data map[string]any, sub *Subscriber) {
 		if v, ok := data["to_id"]; ok && client.onId != nil && v.(string) == client.Id {
 			delete(data, "to_id")
 			client.onId(data, sub)
@@ -148,7 +139,7 @@ func (client *Client) handle() {
 	})
 }
 
-func (client *Client) Subscribe(topic string, handler func(data map[string]any, sub *ClientSubscription)) *ClientSubscription {
+func (client *Client) Subscribe(topic string, handler func(data map[string]any, sub *Subscriber)) *Subscriber {
 	id := client.Id
 	data := map[string]any{
 		"action": "sub",
@@ -159,14 +150,14 @@ func (client *Client) Subscribe(topic string, handler func(data map[string]any, 
 	err := client.Conn.WriteJSON(data)
 	if err != nil {
 		klog.Printf("rderror subscribing on %s %v\n", topic, err)
-		return &ClientSubscription{
+		return &Subscriber{
 			Id:    id,
 			Topic: topic,
 			Conn:  client.Conn,
 		}
 	}
 	client.topicHandlers.Set(topic, handler)
-	return &ClientSubscription{
+	return &Subscriber{
 		Id:    id,
 		Topic: topic,
 		Conn:  client.Conn,
@@ -227,7 +218,7 @@ func (client *Client) PublishWaitRecv(topic string, data map[string]any, onRecv 
 	data["topic"] = topic
 	done := make(chan struct{})
 
-	cs := client.Subscribe(eventId, func(data map[string]any, sub *ClientSubscription) {
+	cs := client.Subscribe(eventId, func(data map[string]any, sub *Subscriber) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
@@ -257,7 +248,7 @@ func (client *Client) PublishToIDWaitRecv(id string, data map[string]any, onRecv
 	data["id"] = id
 	done := make(chan struct{})
 
-	cs := client.Subscribe(eventId, func(data map[string]any, sub *ClientSubscription) {
+	cs := client.Subscribe(eventId, func(data map[string]any, sub *Subscriber) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
@@ -323,21 +314,7 @@ func (client *Client) Run() {
 	}
 }
 
-func (subscribtion *ClientSubscription) Unsubscribe() *ClientSubscription {
-	data := map[string]any{
-		"action": "unsub",
-		"topic":  subscribtion.Topic,
-		"from":   clientId,
-	}
-	err := subscribtion.Conn.WriteJSON(data)
-	if err != nil {
-		klog.Printf("rderror unsubscribing on %s %v %v\n", subscribtion.Topic, err, data)
-		return subscribtion
-	}
-	return subscribtion
-}
-
-func (client *Client) handleData(fn func(data map[string]any, sub *ClientSubscription)) {
+func (client *Client) handleData(fn func(data map[string]any, sub *Subscriber)) {
 	go func() {
 		defer close(client.Done)
 		for {
@@ -362,7 +339,7 @@ func (client *Client) handleData(fn func(data map[string]any, sub *ClientSubscri
 				}
 				err = client.onDataWS(message, client.Conn)
 				if err == nil {
-					sub := ClientSubscription{
+					sub := Subscriber{
 						Conn: client.Conn,
 					}
 					if v, ok := message["topic"]; ok {

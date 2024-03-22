@@ -19,66 +19,66 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/ksmux/ws"
 )
 
 // Bus type handle all subscriptions, websockets and channels
 type Bus struct {
-	subscribers   *kmap.SafeMap[string, []Channel]
-	wsSubscribers *kmap.SafeMap[string, []ClientSubscription]
-	allWS         *kmap.SafeMap[*ws.Conn, string]
-	mu            sync.Mutex
+	topicSubscribers *kmap.SafeMap[string, []Subscriber]
+	allWS            *kmap.SafeMap[*ws.Conn, string]
+	idConn           *kmap.SafeMap[string, *ws.Conn]
+	mu               sync.Mutex
 }
 
 // New return new Bus
 func New() *Bus {
 	return &Bus{
-		subscribers:   kmap.New[string, []Channel](false),
-		wsSubscribers: kmap.New[string, []ClientSubscription](false),
-		allWS:         kmap.New[*ws.Conn, string](false),
+		topicSubscribers: kmap.New[string, []Subscriber](false),
+		allWS:            kmap.New[*ws.Conn, string](false),
+		idConn:           kmap.New[string, *ws.Conn](false),
 	}
 }
 
-// Subscribe let you subscribe to a topic and return a unsubscriber channel
-func (b *Bus) Subscribe(topic string, fn func(data map[string]any, ch Channel), onData ...func(data map[string]any)) (ch Channel) {
-	// add sub
-	ch = Channel{
-		Ch:    make(chan map[string]any),
+func (b *Bus) Subscribe(topic string, fn func(data map[string]any, sub Subscriber), onData ...func(data map[string]any)) (sub Subscriber) {
+	sub = Subscriber{
+		Id:    "INTERNAL",
 		Topic: topic,
+		Ch:    make(chan map[string]any),
 		bus:   b,
 	}
-	if subs, found := b.subscribers.Get(topic); found {
-		subs = append(subs, ch)
-		b.subscribers.Set(topic, subs)
+
+	if subs, found := b.topicSubscribers.Get(topic); found {
+		subs = append(subs, sub)
+		b.topicSubscribers.Set(topic, subs)
 	} else {
-		b.subscribers.Set(topic, []Channel{ch})
+		b.topicSubscribers.Set(topic, []Subscriber{sub})
 	}
 
 	go func() {
-		for v := range ch.Ch {
-			if len(onData) > 0 && onData[0] != nil {
-				onData[0](v)
+		for v := range sub.Ch {
+			for _, fnData := range onData {
+				fnData(v)
 			}
-			fn(v, ch)
+			fn(v, sub)
 		}
 	}()
-	return ch
+	return sub
 }
 
-func (b *Bus) Unsubscribe(ch Channel) {
-	// add sub
-	if subs, found := ch.bus.subscribers.Get(ch.Topic); found {
+func (b *Bus) Unsubscribe(topic string) {
+	if subs, ok := b.topicSubscribers.Get(topic); ok {
 		for i, sub := range subs {
-			if sub == ch {
+			if sub.Id == "INTERNAL" {
+				if sub.Ch != nil {
+					close(sub.Ch)
+				}
 				subs = append(subs[:i], subs[i+1:]...)
+				b.topicSubscribers.Set(topic, subs)
 			}
 		}
-		b.mu.Lock()
-		b.subscribers.Set(ch.Topic, subs)
-		b.mu.Unlock()
 	}
-	close(ch.Ch)
 }
 
 func (b *Bus) Publish(topic string, data map[string]any) error {
@@ -86,13 +86,17 @@ func (b *Bus) Publish(topic string, data map[string]any) error {
 		data["from"] = "INTERNAL"
 	}
 	data["topic"] = topic
-	if chans, found := b.subscribers.Get(topic); found {
-		channels := append([]Channel{}, chans...)
-		go func() {
-			for _, ch := range channels {
-				ch.Ch <- data
+
+	if subs, found := b.topicSubscribers.Get(topic); found {
+		for _, s := range subs {
+			if s.Ch != nil {
+				s.Ch <- data
+			} else {
+				b.mu.Lock()
+				klog.CheckError(s.Conn.WriteJSON(data))
+				b.mu.Unlock()
 			}
-		}()
+		}
 	} else {
 		return ErrNotFound
 	}
@@ -100,24 +104,18 @@ func (b *Bus) Publish(topic string, data map[string]any) error {
 }
 
 func (b *Bus) PublishToID(id string, data map[string]any) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	if _, ok := data["from"]; !ok {
 		data["from"] = "INTERNAL"
 	}
 	data["to_id"] = id
-	found := false
-	b.allWS.Range(func(key *ws.Conn, value string) {
-		if value == id {
-			found = true
-			_ = key.WriteJSON(data)
-			return
-		}
-	})
-	if !found {
+	if conn, ok := b.idConn.Get(id); ok {
+		b.mu.Lock()
+		klog.CheckError(conn.WriteJSON(data))
+		b.mu.Unlock()
+		return nil
+	} else {
 		return ErrNotFound
 	}
-	return nil
 }
 
 func (b *Bus) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, topic string)) error {
@@ -128,13 +126,12 @@ func (b *Bus) PublishWaitRecv(topic string, data map[string]any, onRecv func(dat
 	eventId := GenerateUUID()
 	data["event_id"] = eventId
 	done := make(chan struct{})
-
-	subs := b.Subscribe(eventId, func(data map[string]any, ch Channel) {
+	subs := b.Subscribe(eventId, func(data map[string]any, sub Subscriber) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
 		}
-		ch.Unsubscribe()
+		sub.Unsubscribe()
 	})
 	err := b.Publish(topic, data)
 	if err != nil {
@@ -169,7 +166,7 @@ func (b *Bus) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(da
 	data["event_id"] = eventId
 	done := make(chan struct{})
 
-	subs := b.Subscribe(eventId, func(data map[string]any, ch Channel) {
+	subs := b.Subscribe(eventId, func(data map[string]any, ch Subscriber) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
@@ -201,6 +198,5 @@ free:
 }
 
 func (b *Bus) RemoveTopic(topic string) {
-	go b.subscribers.Delete(topic)
-	go b.wsSubscribers.Delete(topic)
+	go b.topicSubscribers.Delete(topic)
 }

@@ -27,8 +27,8 @@ func main() {
 		fmt.Println("srv OnId:", data)
 	})
 
-	bus.Subscribe("server1", func(data map[string]any, ch ksbus.Channel) {
-		fmt.Println("server1 recv:", data)
+	bus.Subscribe("server1", func(data map[string]any, ch ksbus.Subscriber) {
+		_ = data
 	})
 
 	app.Get("/", func(c *ksmux.Context) {
@@ -36,12 +36,8 @@ func main() {
 	})
 
 	app.Get("/pp", func(c *ksmux.Context) {
-		err := bus.Bus.PublishToIDWaitRecv("browser", map[string]any{
+		err := bus.Bus.Publish("server1", map[string]any{
 			"data": "hello from INTERNAL",
-		}, func(data map[string]any) {
-			fmt.Println("pp OnRecv:", data)
-		}, func(_, id string) {
-			fmt.Println("FAILED", id)
 		})
 		klog.CheckError(err)
 		c.Text("ok")

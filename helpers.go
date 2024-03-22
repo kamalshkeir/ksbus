@@ -9,111 +9,62 @@ import (
 	"github.com/kamalshkeir/ksmux/ws"
 )
 
-func (s *Server) publishWS(topic string, data map[string]any) error {
-	s.Bus.mu.Lock()
-	defer s.Bus.mu.Unlock()
-	data["topic"] = topic
-	if subscriptions, ok := s.Bus.wsSubscribers.Get(topic); ok {
-		for _, sub := range subscriptions {
-			_ = sub.Conn.WriteJSON(data)
-		}
-	} else {
-		return ErrNotFound
-	}
-	return nil
-}
-
 func (s *Server) subscribeWS(id, topic string, conn *ws.Conn) {
-	wsSubscribers := s.Bus.wsSubscribers
-	new := ClientSubscription{
-		Conn:  conn,
-		Id:    id,
-		Topic: topic,
-	}
 	if id == "" {
 		GenerateRandomString(5)
 	}
+	if subs, ok := s.Bus.topicSubscribers.Get(topic); ok {
+		subs = append(subs, Subscriber{
+			bus:   s.Bus,
+			Id:    id,
+			Topic: topic,
+			Conn:  conn,
+		})
+		s.Bus.topicSubscribers.Set(topic, subs)
+	} else {
+		_ = s.Bus.topicSubscribers.Set(topic, []Subscriber{{
+			bus:   s.Bus,
+			Id:    id,
+			Topic: topic,
+			Conn:  conn,
+		}})
+	}
+}
 
-	clients, ok := wsSubscribers.Get(topic)
-	if ok {
-		if len(clients) == 0 {
-			clients = []ClientSubscription{new}
-			wsSubscribers.Set(topic, clients)
-		} else {
-			found := false
-			for _, c := range clients {
-				if c.Conn == conn {
-					found = true
-				}
-			}
-			if !found {
-				clients = append(clients, new)
-				wsSubscribers.Set(topic, clients)
+func (s *Server) unsubscribeWS(topic string, wsConn *ws.Conn) {
+	if clients, ok := s.Bus.topicSubscribers.Get(topic); ok {
+		for i, s := range clients {
+			if s.Conn == wsConn {
+				clients = append(clients[:i], clients[i+1:]...)
+				s.bus.topicSubscribers.Set(topic, clients)
+				return
 			}
 		}
-	} else {
-		clients = []ClientSubscription{new}
-		wsSubscribers.Set(topic, clients)
 	}
 }
 
 func (s *Server) removeWSFromAllTopics(wsConn *ws.Conn) {
-	go func() {
-		s.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
-			for i, sub := range value {
-				if sub.Conn == wsConn {
-					value = append(value[:i], value[i+1:]...)
-					go s.Bus.wsSubscribers.Set(key, value)
-				}
-			}
-		})
-		s.Bus.allWS.Delete(wsConn)
-		s.sendToServerConnections.Range(func(key string, value *ws.Conn) {
-			if value == wsConn {
-				go s.sendToServerConnections.Delete(key)
-			}
-		})
-	}()
-}
-
-func (s *Server) unsubscribeWS(id, topic string, wsConn *ws.Conn) {
-	go func() {
-		if clients, ok := s.Bus.wsSubscribers.Get(topic); ok {
-			for i, sub := range clients {
-				if sub.Conn == wsConn && sub.Id == id {
-					clients = append(clients[:i], clients[i+1:]...)
-					go s.Bus.wsSubscribers.Set(topic, clients)
-				}
+	s.Bus.topicSubscribers.Range(func(key string, value []Subscriber) {
+		for i, v := range value {
+			if v.Conn == wsConn {
+				value = append(value[:i], value[i+1:]...)
+				s.Bus.topicSubscribers.Set(key, value)
+				break
 			}
 		}
-	}()
+	})
 }
 
 func (server *Server) AllTopics() []string {
-	res := make(map[string]struct{})
-	server.Bus.subscribers.Range(func(key string, value []Channel) {
-		res[key] = struct{}{}
-	})
-	server.Bus.wsSubscribers.Range(func(key string, value []ClientSubscription) {
-		res[key] = struct{}{}
-	})
-	n := []string{}
-	for k := range res {
-		n = append(n, k)
-	}
-	return n
+	return server.Bus.topicSubscribers.Keys()
 }
 
-func (server *Server) GetSubscribers(topic string) ([]Channel, []ClientSubscription) {
-	var channelsSubs []Channel
-	var wsSubs []ClientSubscription
-	if ss, ok := server.Bus.subscribers.Get(topic); ok {
-		channelsSubs = ss
+func (server *Server) GetSubscribers(topic string) []Subscriber {
+
+	if subs, ok := server.Bus.topicSubscribers.Get(topic); ok {
+		return subs
 	}
-	if ss, ok := server.Bus.wsSubscribers.Get(topic); ok {
-		wsSubs = ss
-	}
-	return channelsSubs, wsSubs
+	return nil
 }
 
 func (server *Server) handleWS() {
@@ -175,7 +126,10 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					if topic, ok := m["topic"]; ok {
 						if from, ok := m["from"]; ok {
 							v["from"] = from
+						} else if cc, ok := server.Bus.allWS.Get(conn); ok {
+							v["from"] = cc
 						}
+
 						err := server.Publish(topic.(string), v)
 						if err != nil {
 							_ = conn.WriteJSON(map[string]any{
@@ -197,11 +151,9 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 		case "sub", "subscribe":
 			if topic, ok := m["topic"]; ok {
 				if from, ok := m["from"]; ok {
-					server.Bus.mu.Lock()
 					server.subscribeWS(from.(string), topic.(string), conn)
-					server.Bus.mu.Unlock()
-				} else {
-					klog.Printf("rdfrom not found\n")
+				} else if cc, ok := server.Bus.allWS.Get(conn); ok {
+					server.subscribeWS(cc, topic.(string), conn)
 				}
 			} else {
 				_ = conn.WriteJSON(map[string]any{
@@ -211,11 +163,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 
 		case "unsub", "unsubscribe":
 			if topic, ok := m["topic"]; ok {
-				if from, ok := m["from"]; ok {
-					server.unsubscribeWS(from.(string), topic.(string), conn)
-				} else {
-					klog.Printf("rdfrom not found, will not be removed:", m)
-				}
+				server.unsubscribeWS(topic.(string), conn)
 			}
 		case "remove_topic", "removeTopic":
 			if topic, ok := m["topic"]; ok {
@@ -243,6 +191,8 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					if id, ok := m["id"]; ok {
 						if from, ok := m["from"]; ok {
 							mm["from"] = from
+						} else if cc, ok := server.Bus.allWS.Get(conn); ok {
+							mm["from"] = cc
 						}
 						err := server.PublishToID(id.(string), mm)
 						if err != nil {
@@ -259,6 +209,8 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					if id, ok := m["id"]; ok {
 						if from, ok := m["from"]; ok {
 							v["from"] = from
+						} else if cc, ok := server.Bus.allWS.Get(conn); ok {
+							v["from"] = cc
 						}
 						if id.(string) == server.ID && server.onId != nil {
 							if eventID, ok := v["event_id"]; ok {
@@ -344,26 +296,27 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 				}
 			}
 		case "ping":
-			if from, ok := m["from"].(string); ok {
-				found := false
-				for _, v := range server.Bus.allWS.Values() {
-					if v == from {
-						found = true
-					}
+			var from string
+			if from, ok = m["from"].(string); !ok {
+				from = GenerateUUID()
+			}
+			found := false
+			for _, v := range server.Bus.allWS.Values() {
+				if v == from {
+					found = true
 				}
-				if !found {
-					server.Bus.allWS.Set(conn, from)
-				} else {
-					_ = conn.WriteJSON(map[string]any{
-						"error": "ID already exist, should be unique",
-					})
-				}
-
+			}
+			if !found {
+				server.Bus.allWS.Set(conn, from)
+				server.Bus.idConn.Set(from, conn)
+			} else {
+				_ = conn.WriteJSON(map[string]any{
+					"error": "ID already exist, should be unique",
+				})
 			}
 			_ = conn.WriteJSON(map[string]any{
 				"data": "pong",
 			})
-
 		default:
 			_ = conn.WriteJSON(map[string]any{
 				"error": "action " + action.(string) + " not handled",

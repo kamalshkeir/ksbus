@@ -1,283 +1,382 @@
-### KSbus is a zero configuration Eventbus written in Golang, it offer an easy way to share/synchronise data between your Golang servers or between you servers and browsers(JS client) , or simply between your GO and JS clients or with Python. 
-It use [Ksmux](https://github.com/kamalshkeir/ksmux)
+# KSBus
 
-### Any Go App can communicate with another Go Server or another Go Client. 
+KSBus is a zero-configuration event bus written in Go, designed to facilitate real-time data sharing and synchronization between Go servers, JavaScript clients, and Python. It's particularly useful for building applications that require real-time communication, such as chat applications or live updates.
 
-### JS client is written in Pure JS, you can serve a single file ./JS/bus.js
+## Features
 
-## Get Started
+- **Zero Configuration**: Easy to set up and use without the need for complex configurations.
+- **Cross-Language Support**: Supports communication between Go servers and clients, JavaScript clients, and Python clients.
+- **Real-Time Data Sharing**: Enables real-time data synchronization and broadcasting.
+- **Auto TLS**: Automatically generates and renews Let's Encrypt certificates for secure communication, simplifying the setup of HTTPS servers.
+
+## Installation
+
+To install KSBus, use the following command:
 
 ```sh
 go get github.com/kamalshkeir/ksbus@v1.2.8
 ```
 
-## You don't know where you can use it ?, here is a simple use case example:
-#### let's take a discord like application for example, if you goal is to broadcast message in realtime to all room members notifying them that a new user joined the room, you can do it using pooling of course, but it's not very efficient, you can use also any broker but it will be hard to subscribe from the browser or html directly
+## Usage
 
-## KSbus make it very easy, here is how:
+### Server Setup
 
-###### Client side:
+To set up a KSBus server, you can use the `NewServer` function. Here's a basic example:
+
+```go
+package main
+
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/ksbus"
+	"github.com/kamalshkeir/ksmux"
+	"github.com/kamalshkeir/ksmux/ws"
+)
+
+func main() {
+	bus := ksbus.NewServer()
+    // bus.Id = "server-9313"
+    fmt.Println("connected as",bus.Id)
+	
+    app := bus.App // get router
+	app.LocalStatics("JS", "/js") //server static dir
+	klog.CheckError(app.LocalTemplates("examples/client-js")) // handle templates dir
+
+	bus.OnDataWs(func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error {
+		fmt.Println("srv OnDataWS:", data)
+		return nil // if error, it will be returned to the client
+	})
+
+	bus.OnId(func(data map[string]any) { //recv on bus.Id from PublishToID
+		fmt.Println("srv OnId:", data)
+	})
+
+	unsub := bus.Subscribe("server1", func(data map[string]any, unsub ksbus.Unsub) {
+		fmt.Println(data)
+		// unsub.Unsubscribe()
+	})
+
+    // unsub.Unsubscribe()
+
+	app.Get("/", func(c *ksmux.Context) {
+		c.Html("index.html", nil)
+	})
+
+	app.Get("/pp", func(c *ksmux.Context) {
+		bus.Bus.Publish("server1", map[string]any{
+			"data": "hello from INTERNAL",
+		})
+		c.Text("ok")
+	})
+
+	fmt.Println("server1 connected as", bus.ID)
+	bus.Run(":9313")
+}
+```
+
+
+
+### Client Setup (JavaScript)
+
+For JavaScript clients, you can use the provided `Bus.js` file. Here's a basic example of how to use it:
 
 ```html
-<script src="path/to/Bus.js"></script>
-<script>
-// Bus can be initialized without any param 'let bus = new Bus()'
-// @param {object} options "default: {...}" 
-// @param {string} options.addr "default: window.location.host"
-// @param {string} options.path "default: /ws/bus"
-// @param {boolean} option.secure "default: false"
-let bus = new Bus({
-	autorestart: true,
-	restartevery: 5
-});
-bus.OnOpen = () => {
-    let sub = bus.Subscribe("room-client",(data,subs) => {
-        // show notification
-		...
+<!DOCTYPE html>
+<html lang="en">
 
-		// publish
-		bus.Publish("test-server",{
-			"data": "Hello from browser",
-		})
-		// you can use subs to unsubscribe
-		subs.Unsubscribe()
-    });
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Index</title>
+</head>
 
-	// or you can unsubscribe from outside the handler using the returned sub from Subscribe method
-	sub.Unsubscribe();
-}
-</script>
+<body>
+    <h1>Index</h1>
+    <input type="text" id="inpp">
+    <button type="button" id="btn">Send</button>
+    <script src="/js/Bus.js"></script>
+    <script>
+        let bus = new Bus({ id: "browser" });
+        bus.OnId = (d) => {
+            console.log("OnId", d)
+        }
+        bus.OnDataWS = (d, wsConn) => {
+            console.log("OnData", d)
+        }
+        bus.OnOpen = () => {
+            console.log("connected", bus.id)
+
+            unsub = bus.Subscribe("index.html",(data,unsub) => { // receive once, then unsub
+                console.log(data);
+                unsub.Unsubscribe();
+            })
+
+            // or you can unsub from the outside using returned unsub from bus.Subscribe
+
+            btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                // publish and wait for recv
+                bus.PublishToIDWaitRecv(inpp.value, { "cxwcwxcc": "hi from browser" }, (data) => {
+                    console.log("onRecv:", data)
+                }, (eventID, id) => {
+                    console.log(`${id} did not receive ${eventID}`);
+                })
+            })
+        }
+    </script>
+</body>
+
+</html>
 ```
-###### Server side:
+
+
+### Client Setup (Go)
+
+For Go clients, you can use the `NewClient` function. Here's a basic example:
+
 ```go
-bus := ksbus.NewServer()
+package main
 
-// whenever you register a new user to the room
-bus.Publish("room-client",map[string]any{
-	....
-})
+import (
+	"fmt"
 
-bus.Run("localhost:9313")
+	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/ksbus"
+	"github.com/kamalshkeir/ksmux/ws"
+)
+
+func main() {
+	client, err := ksbus.NewClient(ksbus.ClientConnectOptions{
+		Id:      "go-client",
+		Address: "localhost:9313",
+		OnDataWs: func(data map[string]any, conn *ws.Conn) error {
+			fmt.Println("ON OnDataWs:", data)
+			return nil
+		},
+		OnId: func(data map[string]any, subs ksbus.Unsub) {
+			fmt.Println("ON OnId:", data)
+		},
+	})
+	if klog.CheckError(err) {
+		return
+	}
+
+	fmt.Println("CLIENT connected as", client.Id)
+
+	client.Subscribe("go-client", func(data map[string]any, sub ksbus.Unsub) {
+		fmt.Println("ON sub go-client:", data)
+	})
+
+	client.Publish("server1", map[string]any{
+		"data": "hello from go client",
+	})
+
+	client.PublishToIDWaitRecv("browser", map[string]any{
+		"data": "hello from go client",
+	}, func(data map[string]any) {
+		fmt.Println("onRecv:", data)
+	}, func(eventId, id string) {
+		fmt.Println("not received:", eventId, id)
+	})
+	client.Run()
+}
 ```
 
 
-##### you can handle authentication or access to certain topics using to [Before Handlers](#before-handlers)
+### Client Setup (Python)
 
+For Python clients, you can install pkg ksbus
+
+```sh
+pip install ksbus==1.2.7
+```
+
+
+```py
+from ksbus import Bus
+
+
+def OnId(data):
+    print("OnId:",data)
+
+def OnOpen(bus):
+    print("connected",bus)
+    bus.PublishToIDWaitRecv("browser",{
+        "data":"hi from pure python"
+    },lambda data:print("OnRecv:",data),lambda event_id:print("OnFail:",event_id))
+
+if __name__ == '__main__':
+    Bus({
+        'id': 'py',
+        'addr': 'localhost:9313',
+        'OnId': OnId,
+        'OnOpen':OnOpen},
+        block=True)
+```
+
+
+##### you can handle authentication or access to certain topics using to [Global Handlers](#global-handlers)
+
+
+# API
 
 ### Internal Bus (No websockets, use channels to handle topic communications)
 
 ```go
-// New return new Bus
 func New() *Bus
-// Subscribe let you subscribe to a topic and return a unsubscriber channel
-func (b *Bus) Subscribe(topic string, fn func(data map[string]any, ch Channel)) (ch Channel)
-func (b *Bus) Unsubscribe(ch Channel)
-func (b *Bus) UnsubscribeId(topic, id string)
+
+func (b *Bus) Subscribe(topic string, fn func(data map[string]any, unsub Unsub), onData ...func(data map[string]any)) Unsub
+
+func (b *Bus) Unsubscribe(topic string)
+
 func (b *Bus) Publish(topic string, data map[string]any)
+
 func (b *Bus) PublishToID(id string, data map[string]any)
-func (b *Bus) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, ch Channel))
+
+func (b *Bus) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, topic string)) error
+
+func (b *Bus) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, id string)) error
+
 func (b *Bus) RemoveTopic(topic string)
 ```
 
 ### Server Bus (use the internal bus and a websocket server)
 ```go
 func NewServer(bus ...*Bus) *Server
-func (s *Server) OnData(fn func(data map[string]any))
-func (s *Server) WithPprof(path ...string)
-func (s *Server) WithMetrics(httpHandler http.Handler, path ...string)
-func (s *Server) Subscribe(topic string, fn func(data map[string]any, ch Channel)) (ch Channel)
-func (s *Server) Unsubscribe(ch Channel)
-func (s *Server) Publish(topic string, data map[string]any, from ...string)
-func (s *Server) PublishToID(id string, data map[string]any, from ...string)
-func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any, ch Channel), from ...string)
+
+func (s *Server) OnServerData(fn func(data any, conn *ws.Conn)) // used when receiving data from other ksbus server (not client) using server.PublishToServer(addr string, data map[string]any, secure ...bool) error
+
+func (s *Server) OnDataWs(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error) // triggered after upgrading connection to websockets and each time on recv new message 
+
+func (s *Server) OnId(fn func(data map[string]any)) // used when server bus receive data on his ID 'server.Id'
+
+func (s *Server) WithPprof(path ...string) // enable std library pprof endpoints /debug/pprof/...
+
+func (s *Server) WithMetrics(httpHandler http.Handler, path ...string) // take prometheus handler as input and serve /metrics if no path specified
+
+func (s *Server) Subscribe(topic string, fn func(data map[string]any, unsub Unsub)) (unsub Unsub)
+
+func (s *Server) Unsubscribe(topic string)
+
+func (srv *Server) Publish(topic string, data map[string]any)
+
+func (s *Server) PublishToID(id string, data map[string]any) // every connection ws (go client, python client, js client and the server), all except the internal bus, each connection should have a unique id that you can send data specificaly to it (not all subscribers on a topic, only a specific connection)
+
+func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, topic string))
+
+func (s *Server) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, toID string))
+
 func (s *Server) RemoveTopic(topic string)
-func (s *Server) PublishToServer(addr string, data map[string]any, secure ...bool)
-func (s *Server) Run(addr string)
-func (s *Server) RunTLS(addr string, cert string, certKey string)
-func (s *Server) RunAutoTLS(domainName string, subDomains ...string)
 
-// param and returned subscribe channel 
-func (ch Channel) Unsubscribe() Channel
+func (s *Server) PublishToServer(addr string, data map[string]any, secure ...bool) error // send to another ksbus server
+
+
+func (s *Server) Run(addr string) // Run without TLS
+func (s *Server) RunTLS(addr string, cert string, certKey string) // RunTLS with TLS from cert files
+func (s *Server) RunAutoTLS(domainName string, subDomains ...string) // RunAutoTLS generate letsencrypt certificates and renew it automaticaly before expire, so you only need to provide a domainName. 
 ```
-
-
-##### Example:
-```go
-func main() {
-	bus := ksbus.NewServer()
-	bus.App.LocalTemplates("tempss") // load template folder to be used with c.HTML
-	bus.App.LocalStatics("assets","/assets/")
-	
-	bus.App.GET("/",func(c *ksmux.Context) {
-		c.Html("index.html",nil)
-	})
-
-	bus.Subscribe("server",func(data map[string]any, ch ksbus.Channel) {
-		log.Println("server recv:",data)
-	})
-
-	
-	bus.App.GET("/pp",func(c *ksmux.Context) {
-		bus.Publish("client",map[string]any{
-			"msg":"hello from server",
-		})
-		c.Text("ok")
-	})
-	
-	bus.Run(":9313")
-}
-```
-
 
 ### Client Bus GO
 
 ```go
 type ClientConnectOptions struct {
+	Id           string
 	Address      string
 	Secure       bool
 	Path         string // default ksbus.ServerPath
 	Autorestart  bool
 	RestartEvery time.Duration
-	OnData       func(data map[string]any)
+	OnDataWs     func(data map[string]any, conn *ws.Conn) error // before data is distributed on different topics
+	OnId         func(data map[string]any, unsub Unsub) // used when client bus receive data on his ID 'client.Id'
 }
+
 func NewClient(opts ClientConnectOptions) (*Client, error)
-func (client *Client) Subscribe(topic string, handler func(data map[string]any, sub *ClientSubscription)) *ClientSubscription
+
+func (client *Client) Subscribe(topic string, handler func(data map[string]any, unsub Unsub)) Unsub
+
 func (client *Client) Unsubscribe(topic string)
+
 func (client *Client) Publish(topic string, data map[string]any)
+
+func (client *Client) PublishToServer(addr string, data map[string]any, secure ...bool)
+
 func (client *Client) PublishToID(id string, data map[string]any)
+
+func (client *Client) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, topic string))
+
+func (client *Client) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, id string))
+
 func (client *Client) RemoveTopic(topic string)
+
 func (client *Client) Close() error
+
 func (client *Client) Run()
-func (subscribtion *ClientSubscription) Unsubscribe() *ClientSubscription
-
-// param and returned subscription
-func (subscribtion *ClientSubscription) Unsubscribe() (*ClientSubscription)
 
 ```
 
-##### Example
-```go
-func main() {
-	client,err := ksbus.NewClient(ksbus.ClientConnectOptions{
-        Address: "localhost:9313",
-		Secure:  false,
-    })
-	if klog.CheckError(err){
-		return
-	}
-	client.Subscribe("topic1",func(data map[string]any, subs *ksbus.ClientSubscription) {
-		fmt.Println("client recv",data)
-	})
+### Client Bus JS
 
-    client.Subscribe("topic2",func(data map[string]any, subs *ksbus.ClientSubscription) {
-		fmt.Println("client recv",data)
-	})
-
-	client.Run()
-}
-```
-
-
-### Client JS
-##### you can find the client ws wrapper in the repos JS folder above
 ```js
-/**
- * Bus can be initialized without any param 'let bus = new Bus()'
- * @param {object} options "default: {...}"
- * @param {string} options.addr "default: window.location.host"
- * @param {string} options.path "default: /ws/bus"
- * @param {boolean} options.secure "default: false"
- */
+class Bus {
+    /**
+     * Bus can be initialized without any param 'let bus = new Bus()'
+     * @param {object} options "default: {...}"
+     * @param {string} options.id "default: uuid"
+     * @param {string} options.addr "default: window.location.host"
+     * @param {string} options.path "default: /ws/bus"
+     * @param {boolean} options.secure "default: false"
+     * @param {boolean} options.autorestart "default: false"
+     * @param {number} options.restartevery "default: 10"
+     */
 
-/**
-     * Subscribe subscribe to a topic
-     * @param {string} topic 
-     * @param {function handler(data: string,subscription: busSubscription) {}} handler 
-     */
-    Subscribe(topic,handler)
-/**
-     * Unsubscribe unsubscribe from topic
-     * @param {string} topic 
-     */
-    Unsubscribe(topic)
-/**
-     * Publish publish to topic
-     * @param {string} topic 
-     * @param {object} data 
-     */
-    Publish(topic,data)
-/**
-     * PublishToID publish to client or server id
-     * @param {string} id 
-     * @param {object} data 
-     */
-     PublishToID(id,data)
-/**
-     * RemoveTopic remove a topic completely from the server bus
-     * @param {string} topic 
-     * @returns 
-     */
-    RemoveTopic(topic)
+Subscribe(topic, handler)
+Unsubscribe(topic)
+Publish(topic, data)
+PublishWaitRecv(topic, data, onRecv, onExpire)
+PublishToIDWaitRecv(id, data, onRecv, onExpire)
+PublishToServer(addr, data, secure)
+PublishToID(id, data)
+RemoveTopic(topic)
 ```
 
-##### JS Client Example:
+### Client Bus PY
 
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">  
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    <h1>Index</h1>
-    <button id="btn">Click</button>
+```py
+class Bus:
+    def __init__(self, options, block=False):
+        self.addr = options.get('addr', 'localhost')
+        self.path = options.get('path', '/ws/bus')
+        self.scheme = 'ws://'
+        if options.get('secure', False):
+            self.scheme = 'wss://'
+        self.full_address = self.scheme + self.addr + self.path
+        self.conn = None
+        self.topic_handlers = {}
+        self.autorestart = options.get('autorestart', False)
+        self.restartevery = options.get('restartevery', 5)
+        self.OnOpen = options.get('OnOpen', lambda bus: None)
+        self.OnClose = options.get('OnClose', lambda: None)
+        self.OnDataWs = options.get('OnDataWs', None)
+        self.OnId = options.get('OnId', lambda data: None)
+        self.id = options.get('id') or self.makeId(12)
 
-
-<script src="/assets/js/Bus.js"></script>
-<script>
-let bus = new Bus({
-	autorestart: true,
-	restartevery: 5
-});
-
-bus.OnOpen = () => {
-    let sub = bus.Subscribe("room-client",(data,subs) => {
-        // show notification
-		...
-
-		// publish
-		bus.Publish("test-server",{
-			"data": "Hello from browser, i got room_client msg",
-		})
-		// you can use subs to unsubscribe
-		//subs.Unsubscribe()
-    });
-
-	// or you can unsubscribe from outside the handler using the returned sub from Subscribe method
-	sub.Unsubscribe();
-}
-
-btn.addEventListener("click",(e) => {
-    e.preventDefault();
-    // send to only one connection , our go client in this case, so this is a communication between client js and client go
-    bus.Publish("test-server",{
-        "msg":"hello go client from client js"
-    })
-})
-
-</script>
-</body>
-</html>
+def Subscribe(self, topic, handler)
+def Unsubscribe(self, topic)
+def Publish(self, topic, data)
+def PublishToID(self, id, data)
+def RemoveTopic(self, topic)
+def PublishWaitRecv(self, topic, data, onRecv, onExpire)
+def PublishToIDWaitRecv(self, id, data, onRecv, onExpire)
+def PublishToServer(self, addr, data, secure)
 ```
 
-## Before Handlers 
+## Global Handlers 
 ```go
-OnDataWS      = func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) bool { return true } // Used for go bus server and client when getting data from the ws connection
-OnUpgradeWS   = func(r *http.Request) bool { return true } // Before upgrading the request to WS
-OnServersData = func(data any, conn *ws.Conn) {} // when recv data from other servers via srvBus.PublishToServer
+OnUpgradeWS   = func(r *http.Request) bool { return true }
+// also server.OnDataWs can be used for auth
 ```
 
 
@@ -304,7 +403,11 @@ app = FastAPI()
 
 
 def initBus():
-    Bus("localhost:9313", onOpen=onOpen)
+    Bus({
+        'id': 'py',
+        'addr': 'localhost:9313',
+        'OnId': OnId,
+        'OnOpen':onOpen})
 
 def onOpen(bus):
     print("connected")

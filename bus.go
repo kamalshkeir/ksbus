@@ -81,7 +81,7 @@ func (b *Bus) Unsubscribe(topic string) {
 	}
 }
 
-func (b *Bus) Publish(topic string, data map[string]any) error {
+func (b *Bus) Publish(topic string, data map[string]any) {
 	if _, ok := data["from"]; !ok {
 		data["from"] = "INTERNAL"
 	}
@@ -97,13 +97,10 @@ func (b *Bus) Publish(topic string, data map[string]any) error {
 				b.mu.Unlock()
 			}
 		}
-	} else {
-		return ErrNotFound
 	}
-	return nil
 }
 
-func (b *Bus) PublishToID(id string, data map[string]any) error {
+func (b *Bus) PublishToID(id string, data map[string]any) {
 	if _, ok := data["from"]; !ok {
 		data["from"] = "INTERNAL"
 	}
@@ -112,9 +109,6 @@ func (b *Bus) PublishToID(id string, data map[string]any) error {
 		b.mu.Lock()
 		klog.CheckError(conn.WriteJSON(data))
 		b.mu.Unlock()
-		return nil
-	} else {
-		return ErrNotFound
 	}
 }
 
@@ -133,14 +127,7 @@ func (b *Bus) PublishWaitRecv(topic string, data map[string]any, onRecv func(dat
 		}
 		unsub.Unsubscribe()
 	})
-	err := b.Publish(topic, data)
-	if err != nil {
-		if onExpire != nil {
-			onExpire(eventId, topic)
-		}
-		subs.Unsubscribe()
-		return err
-	}
+	b.Publish(topic, data)
 free:
 	for {
 		select {
@@ -173,14 +160,7 @@ func (b *Bus) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(da
 		}
 		unsub.Unsubscribe()
 	})
-	err := b.PublishToID(id, data)
-	if err != nil {
-		if onExpire != nil {
-			onExpire(eventId, id)
-		}
-		subs.Unsubscribe()
-		return err
-	}
+	b.PublishToID(id, data)
 free:
 	for {
 		select {

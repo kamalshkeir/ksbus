@@ -111,12 +111,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					}
 					if topic, ok := m["topic"]; ok {
 						mm["topic"] = topic.(string)
-						err := server.Publish(topic.(string), mm)
-						if err != nil {
-							_ = conn.WriteJSON(map[string]any{
-								"error": topic.(string) + err.Error(),
-							})
-						}
+						server.Publish(topic.(string), mm)
 					} else {
 						_ = conn.WriteJSON(map[string]any{
 							"error": "topic missing",
@@ -130,12 +125,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 							v["from"] = cc
 						}
 
-						err := server.Publish(topic.(string), v)
-						if err != nil {
-							_ = conn.WriteJSON(map[string]any{
-								"error": topic.(string) + err.Error(),
-							})
-						}
+						server.Publish(topic.(string), v)
 					} else {
 						_ = conn.WriteJSON(map[string]any{
 							"error": "topic missing",
@@ -194,12 +184,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 						} else if cc, ok := server.Bus.allWS.Get(conn); ok {
 							mm["from"] = cc
 						}
-						err := server.PublishToID(id.(string), mm)
-						if err != nil {
-							_ = conn.WriteJSON(map[string]any{
-								"error": id.(string) + err.Error(),
-							})
-						}
+						server.PublishToID(id.(string), mm)
 					} else {
 						_ = conn.WriteJSON(map[string]any{
 							"error": "id missing",
@@ -222,12 +207,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 							server.onId(v)
 							return
 						}
-						err := server.PublishToID(id.(string), v)
-						if err != nil {
-							_ = conn.WriteJSON(map[string]any{
-								"error": id.(string) + err.Error(),
-							})
-						}
+						server.PublishToID(id.(string), v)
 					} else {
 						_ = conn.WriteJSON(map[string]any{
 							"error": "id missing",

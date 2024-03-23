@@ -37,10 +37,9 @@ func main() {
 	})
 
 	app.Get("/pp", func(c *ksmux.Context) {
-		err := bus.Bus.Publish("server1", map[string]any{
+		bus.Bus.Publish("server1", map[string]any{
 			"data": "hello from INTERNAL",
 		})
-		klog.CheckError(err)
 		c.Text("ok")
 	})
 

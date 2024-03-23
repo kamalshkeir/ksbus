@@ -63,7 +63,7 @@ func (s *Server) Subscribe(topic string, fn func(data map[string]any, unsub Unsu
 	}
 	return s.Bus.Subscribe(topic, fn, func(data map[string]any) {
 		if eventID, ok := data["event_id"]; ok {
-			_ = s.Publish(eventID.(string), map[string]any{
+			s.Publish(eventID.(string), map[string]any{
 				"ok":   "done",
 				"from": s.ID,
 			})
@@ -75,7 +75,7 @@ func (s *Server) Unsubscribe(topic string) {
 	s.Bus.Unsubscribe(topic)
 }
 
-func (srv *Server) Publish(topic string, data map[string]any) error {
+func (srv *Server) Publish(topic string, data map[string]any) {
 	if _, ok := data["from"]; !ok {
 		data["from"] = srv.ID
 	}
@@ -87,23 +87,20 @@ func (srv *Server) Publish(topic string, data map[string]any) error {
 			} else {
 				srv.Bus.mu.Lock()
 				defer srv.Bus.mu.Unlock()
-				return s.Conn.WriteJSON(data)
+				s.Conn.WriteJSON(data)
 			}
 		}
-	} else {
-		return ErrNotFound
 	}
-	return nil
 }
 
-func (s *Server) PublishToID(id string, data map[string]any) error {
+func (s *Server) PublishToID(id string, data map[string]any) {
 	if _, ok := data["from"]; !ok {
 		data["from"] = s.ID
 	}
-	return s.Bus.PublishToID(id, data)
+	s.Bus.PublishToID(id, data)
 }
 
-func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, topic string)) error {
+func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, topic string)) {
 	if _, ok := data["from"]; !ok {
 		data["from"] = s.ID
 	}
@@ -119,14 +116,7 @@ func (s *Server) PublishWaitRecv(topic string, data map[string]any, onRecv func(
 		}
 		unsub.Unsubscribe()
 	})
-	err := s.Publish(topic, data)
-	if err != nil {
-		if onExpire != nil {
-			onExpire(eventId, topic)
-		}
-		subs.Unsubscribe()
-		return err
-	}
+	s.Publish(topic, data)
 free:
 	for {
 		select {
@@ -140,10 +130,9 @@ free:
 			break free
 		}
 	}
-	return nil
 }
 
-func (s *Server) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, toID string)) error {
+func (s *Server) PublishToIDWaitRecv(id string, data map[string]any, onRecv func(data map[string]any), onExpire func(eventId string, toID string)) {
 	if _, ok := data["from"]; !ok {
 		data["from"] = s.ID
 	}
@@ -158,14 +147,7 @@ func (s *Server) PublishToIDWaitRecv(id string, data map[string]any, onRecv func
 		}
 		unsub.Unsubscribe()
 	})
-	err := s.PublishToID(id, data)
-	if err != nil {
-		if onExpire != nil {
-			onExpire(eventId, id)
-		}
-		subs.Unsubscribe()
-		return err
-	}
+	s.PublishToID(id, data)
 free:
 	for {
 		select {
@@ -179,7 +161,6 @@ free:
 			break free
 		}
 	}
-	return nil
 }
 
 func (s *Server) RemoveTopic(topic string) {

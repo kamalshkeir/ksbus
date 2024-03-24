@@ -431,33 +431,3 @@ async def read_root():
 async def read_item(item_id: int, q: Union[str, None] = None):
     return {"item_id": item_id, "q": q}
 ```
-
-Pure Python example
-
-```py
-from ksbus import Bus
-
-
-# pythonTopicHandler handle topic 'python'
-async def pythonTopicHandler(data,subs):
-    print("recv on topic python:",data)
-    # Unsubscribe
-    #await subs.Unsubscribe()
-
-def OnId(data):
-    print("OnId:",data)
-
-def OnOpen(bus):
-    print("connected",bus)
-    bus.PublishToIDWaitRecv("browser",{
-        "data":"hi from pure python"
-    },lambda data:print("OnRecv:",data),lambda event_id:print("OnFail:",event_id))
-
-if __name__ == '__main__':
-    Bus({
-        'id': 'py',
-        'addr': 'localhost:9313',
-        'OnId': OnId,
-        'OnOpen':OnOpen},
-        block=True)
-```

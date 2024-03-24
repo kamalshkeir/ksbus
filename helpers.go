@@ -84,15 +84,17 @@ func (server *Server) handleWS() {
 				server.removeWSFromAllTopics(conn)
 				break
 			}
-			if err := server.onDataWS(m, conn, c.Request); err != nil {
-				_ = conn.WriteJSON(map[string]any{
-					"error": err.Error(),
-				})
-				continue
-			}
 			if DEBUG {
 				klog.Printfs("--------------------------------\n")
 				klog.Printfs("yl%v \n", m)
+			}
+			if server.onDataWS != nil {
+				if err := server.onDataWS(m, conn, c.Request); err != nil {
+					_ = conn.WriteJSON(map[string]any{
+						"error": err.Error(),
+					})
+					continue
+				}
 			}
 			server.handleActions(m, conn)
 		}

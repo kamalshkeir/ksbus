@@ -2,33 +2,33 @@ class Bus {
     /**
      * Bus can be initialized without any param 'let bus = new Bus()'
      * @param {object} options "default: {...}"
-     * @param {string} options.id "default: uuid"
-     * @param {string} options.addr "default: window.location.host"
-     * @param {string} options.path "default: /ws/bus"
-     * @param {boolean} options.secure "default: false"
-     * @param {boolean} options.autorestart "default: false"
-     * @param {number} options.restartevery "default: 10"
+     * @param {string} options.Id "default: uuid"
+     * @param {string} options.Address "default: window.location.host"
+     * @param {string} options.Path "default: /ws/bus"
+     * @param {boolean} options.Secure "default: false"
+     * @param {boolean} options.Autorestart "default: false"
+     * @param {number} options.RestartEvery "default: 10"
      */
     constructor(options) {
         if (options === undefined) {
             options = {}
         }
-        this.addr = options.addr || window.location.host;
-        this.path = options.path || "/ws/bus";
+        this.Address = options.Address || window.location.host;
+        this.Path = options.Path || "/ws/bus";
         this.scheme = options.scheme || "ws://";
-        this.fullAddress = this.scheme + this.addr + this.path;
+        this.fullAddress = this.scheme + this.Address + this.Path;
         this.TopicHandlers = {};
-        this.autorestart = options.autorestart || false;
-        this.restartevery = options.restartevery || 10;
-        this.secure = options.secure || false;
-        if (this.secure) {
+        this.Autorestart = options.Autorestart || false;
+        this.RestartEvery = options.RestartEvery || 10;
+        this.Secure = options.Secure || false;
+        if (this.Secure) {
             this.scheme = "wss://"
         }
         this.OnOpen = () => { };
         this.OnClose = () => { };
         this.OnDataWs = (data, ws) => { };
         this.OnId = (data) => { };
-        this.id = options.id || this.makeid();
+        this.Id = options.Id || this.makeid();
         this.conn = this.connect(this.fullAddress, this.callback);
     }
 
@@ -40,7 +40,7 @@ class Bus {
             console.log("Bus Connected");
             $this.conn.send(JSON.stringify({
                 "action": "ping",
-                "from": $this.id
+                "from": $this.Id
             }));
             $this.TopicHandlers = {};
             $this.OnOpen();
@@ -53,10 +53,10 @@ class Bus {
             if (obj.event_id !== undefined) {
                 $this.Publish(obj.event_id, {
                     "ok": "done",
-                    "from": $this.id
+                    "from": $this.Id
                 })
             }
-            if (obj.to_id !== undefined && obj.to_id === $this.id && $this.OnId !== undefined) {
+            if (obj.to_id !== undefined && obj.to_id === $this.Id && $this.OnId !== undefined) {
                 delete obj.to_id
                 $this.OnId(obj);
             }
@@ -72,11 +72,11 @@ class Bus {
 
         $this.conn.onclose = (e) => {
             $this.OnClose();
-            if ($this.autorestart) {
-                console.log('Socket is closed. Reconnect will be attempted in ' + this.restartevery + ' second.', e.reason);
+            if ($this.Autorestart) {
+                console.log('Socket is closed. Reconnect will be attempted in ' + this.RestartEvery + ' second.', e.reason);
                 setTimeout(function () {
                     $this.conn = $this.connect(path, callbackOnData);
-                }, this.restartevery * 1000);
+                }, this.RestartEvery * 1000);
             } else {
                 console.log('Socket is closed:', e.reason);
             }
@@ -98,7 +98,7 @@ class Bus {
         this.conn.send(JSON.stringify({
             "action": "sub",
             "topic": topic,
-            "from": this.id
+            "from": this.Id
         }));
         let subs = new busSubscription(this, topic);
         this.TopicHandlers[topic] = handler;
@@ -113,7 +113,7 @@ class Bus {
         let data = {
             "action": "unsub",
             "topic": topic,
-            "from": this.id
+            "from": this.Id
         }
         this.conn.send(JSON.stringify(data));
         if (this.TopicHandlers !== undefined) {
@@ -131,7 +131,7 @@ class Bus {
             "action": "pub",
             "topic": topic,
             "data": data,
-            "from": this.id
+            "from": this.Id
         }));
     }
 
@@ -143,7 +143,7 @@ class Bus {
      * @param {function} onExpire 
      */
     PublishWaitRecv(topic, data, onRecv, onExpire) {
-        data.from = this.id;
+        data.from = this.Id;
         data.topic = topic;
         let eventId = this.makeid();
         data.event_id = eventId;
@@ -176,7 +176,7 @@ class Bus {
      * @param {function} onExpire 
      */
     PublishToIDWaitRecv(id, data, onRecv, onExpire) {
-        data.from = this.id;
+        data.from = this.Id;
         data.id = id;
         let eventId = this.makeid();
         data.event_id = eventId;
@@ -215,7 +215,7 @@ class Bus {
             "addr": addr,
             "data": data,
             "secure": secure,
-            "from": this.id
+            "from": this.Id
         }));
     }
 
@@ -229,7 +229,7 @@ class Bus {
             "action": "pub_id",
             "id": id,
             "data": data,
-            "from": this.id
+            "from": this.Id
         }));
     }
 
@@ -243,7 +243,7 @@ class Bus {
             this.conn.send(JSON.stringify({
                 "action": "remove_topic",
                 "topic": topic,
-                "from": this.id
+                "from": this.Id
             }));
             return
         } else {

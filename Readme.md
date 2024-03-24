@@ -99,15 +99,15 @@ For JavaScript clients, you can use the provided `Bus.js` file. Here's a basic e
     <button type="button" id="btn">Send</button>
     <script src="/js/Bus.js"></script>
     <script>
-        let bus = new Bus({ id: "browser" });
+        let bus = new Bus({ Id: "browser" });
         bus.OnId = (d) => {
-            console.log("OnId", d)
+            console.log("recv OnId", d)
         }
         bus.OnDataWS = (d, wsConn) => {
-            console.log("OnData", d)
+            console.log("recv OnData", d)
         }
         bus.OnOpen = () => {
-            console.log("connected", bus.id)
+            console.log("connected", bus.Id)
 
             unsub = bus.Subscribe("index.html",(data,unsub) => { // receive once, then unsub
                 console.log(data);
@@ -191,7 +191,7 @@ func main() {
 For Python clients, you can install pkg ksbus
 
 ```sh
-pip install ksbus==1.2.7
+pip install ksbus==1.2.8
 ```
 
 
@@ -203,15 +203,15 @@ def OnId(data):
     print("OnId:",data)
 
 def OnOpen(bus):
-    print("connected",bus)
+    print("connected as ",bus.Id)
     bus.PublishToIDWaitRecv("browser",{
         "data":"hi from pure python"
     },lambda data:print("OnRecv:",data),lambda event_id:print("OnFail:",event_id))
 
 if __name__ == '__main__':
     Bus({
-        'id': 'py',
-        'addr': 'localhost:9313',
+        'Id': 'py',
+        'Address': 'localhost:9313',
         'OnId': OnId,
         'OnOpen':OnOpen},
         block=True)
@@ -324,12 +324,12 @@ class Bus {
     /**
      * Bus can be initialized without any param 'let bus = new Bus()'
      * @param {object} options "default: {...}"
-     * @param {string} options.id "default: uuid"
-     * @param {string} options.addr "default: window.location.host"
-     * @param {string} options.path "default: /ws/bus"
-     * @param {boolean} options.secure "default: false"
-     * @param {boolean} options.autorestart "default: false"
-     * @param {number} options.restartevery "default: 10"
+     * @param {string} options.Id "default: uuid"
+     * @param {string} options.Address "default: window.location.host"
+     * @param {string} options.Path "default: /ws/bus"
+     * @param {boolean} options.Secure "default: false"
+     * @param {boolean} options.AutoRestart "default: false"
+     * @param {number} options.RestartEvery "default: 10"
      */
 
 Subscribe(topic, handler)
@@ -347,21 +347,21 @@ RemoveTopic(topic)
 ```py
 class Bus:
     def __init__(self, options, block=False):
-        self.addr = options.get('addr', 'localhost')
-        self.path = options.get('path', '/ws/bus')
+        self.Address = options.get('Address', 'localhost')
+        self.Path = options.get('Path', '/ws/bus')
         self.scheme = 'ws://'
-        if options.get('secure', False):
+        if options.get('Secure', False):
             self.scheme = 'wss://'
         self.full_address = self.scheme + self.addr + self.path
         self.conn = None
         self.topic_handlers = {}
-        self.autorestart = options.get('autorestart', False)
-        self.restartevery = options.get('restartevery', 5)
+        self.AutoRestart = options.get('AutoRestart', False)
+        self.RestartEvery = options.get('restartEvery', 5)
         self.OnOpen = options.get('OnOpen', lambda bus: None)
         self.OnClose = options.get('OnClose', lambda: None)
         self.OnDataWs = options.get('OnDataWs', None)
         self.OnId = options.get('OnId', lambda data: None)
-        self.id = options.get('id') or self.makeId(12)
+        self.Id = options.get('Id') or self.makeId(12)
 
 def Subscribe(self, topic, handler)
 def Unsubscribe(self, topic)
@@ -382,7 +382,7 @@ OnUpgradeWS   = func(r *http.Request) bool { return true }
 
 ## Example Python Client
 ```sh
-pip install ksbus==1.2.7
+pip install ksbus==1.2.8
 ```
 
 With FastApi example:
@@ -404,8 +404,8 @@ app = FastAPI()
 
 def initBus():
     Bus({
-        'id': 'py',
-        'addr': 'localhost:9313',
+        'Id': 'py',
+        'Address': 'localhost:9313',
         'OnId': OnId,
         'OnOpen':onOpen})
 

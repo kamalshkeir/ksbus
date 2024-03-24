@@ -16,21 +16,21 @@ import websockets
 
 class Bus:
     def __init__(self, options, block=False):
-        self.addr = options.get('addr', 'localhost')
-        self.path = options.get('path', '/ws/bus')
+        self.Address = options.get('Address', 'localhost')
+        self.Path = options.get('Path', '/ws/bus')
         self.scheme = 'ws://'
-        if options.get('secure', False):
+        if options.get('Secure', False):
             self.scheme = 'wss://'
-        self.full_address = self.scheme + self.addr + self.path
+        self.full_address = self.scheme + self.Address + self.Path
         self.conn = None
         self.topic_handlers = {}
-        self.autorestart = options.get('autorestart', False)
-        self.restartevery = options.get('restartevery', 5)
+        self.AutoRestart = options.get('AutoRestart', False)
+        self.RestartEvery = options.get('RestartEvery', 5)
         self.OnOpen = options.get('OnOpen', lambda bus: None)
         self.OnClose = options.get('OnClose', lambda: None)
         self.OnDataWs = options.get('OnDataWs', None)
         self.OnId = options.get('OnId', lambda data: None)
-        self.id = options.get('id') or self.makeId(12)
+        self.Id = options.get('Id') or self.makeId(12)
         try:
             if block :
                 asyncio.get_event_loop().run_until_complete(self.connect(self.full_address))
@@ -42,14 +42,14 @@ class Bus:
     async def connect(self, path):
         try:
             self.conn = await websockets.connect(path)
-            await self.sendMessage({"action": "ping", "from": self.id})
+            await self.sendMessage({"action": "ping", "from": self.Id})
             async for message in self.conn:
                 obj = json.loads(message)
                 if self.OnDataWs is not None:
                     self.OnDataWs(obj,self.conn)
                 if "event_id" in obj:
-                    self.Publish(obj["event_id"], {"ok": "done", "from": self.id, "event_id":obj["event_id"]})
-                if "to_id" in obj and obj["to_id"] == self.id:
+                    self.Publish(obj["event_id"], {"ok": "done", "from": self.Id, "event_id":obj["event_id"]})
+                if "to_id" in obj and obj["to_id"] == self.Id:
                     if self.OnId is not None:
                         self.OnId(obj)
                 elif "topic" in obj:
@@ -61,14 +61,14 @@ class Bus:
                         self.OnOpen(self)
         except Exception as e:
             print(f"Server closed the connection: {e}")
-            if self.autorestart:
+            if self.AutoRestart:
                 while True:
                     print(f"Reconnecting in {self.restartevery} seconds...")
                     await asyncio.sleep(self.restartevery)
                     await self.connect(self.full_address)
 
     def Subscribe(self, topic, handler):
-        payload = {"action": "sub", "topic": topic, "from": self.id}
+        payload = {"action": "sub", "topic": topic, "from": self.Id}
         subs = BusSubscription(self, topic)
         self.topic_handlers[topic] = handler
             
@@ -77,7 +77,7 @@ class Bus:
         return subs
 
     def Unsubscribe(self, topic):
-        payload = {"action": "unsub", "topic": topic, "from": self.id}
+        payload = {"action": "unsub", "topic": topic, "from": self.Id}
         del self.topic_handlers[topic]
             
         if topic and self.conn is not None:
@@ -91,26 +91,26 @@ class Bus:
 
     def Publish(self, topic, data):
         if self.conn is not None:
-            asyncio.create_task(self.sendMessage({"action": "pub", "topic": topic, "data": data, "from": self.id}))
+            asyncio.create_task(self.sendMessage({"action": "pub", "topic": topic, "data": data, "from": self.Id}))
         else:
             print("Publish: Not connected to server. Please check the connection.")
 
     def PublishToID(self, id, data):
         if self.conn is not None:
-            asyncio.create_task(self.sendMessage({"action": "pub_id", "id": id, "data": data, "from": self.id}))
+            asyncio.create_task(self.sendMessage({"action": "pub_id", "id": id, "data": data, "from": self.Id}))
         else:
             print("PublishToID: Not connected to server. Please check the connection.")
 
     def RemoveTopic(self, topic):
         if self.conn is not None:
-            asyncio.create_task(self.sendMessage({"action": "remove", "topic": topic, "from": self.id}))
+            asyncio.create_task(self.sendMessage({"action": "remove", "topic": topic, "from": self.Id}))
             del self.topic_handlers[topic]
 
     def makeId(self, length):
         return "".join(random.choices(string.ascii_letters + string.digits, k=length))
 
     def PublishWaitRecv(self, topic, data, onRecv, onExpire):
-        data["from"] = self.id
+        data["from"] = self.Id
         data["topic"] = topic
         eventId = self.makeId(8)
         data["event_id"] = eventId
@@ -138,7 +138,7 @@ class Bus:
 
 
     def PublishToIDWaitRecv(self, id, data, onRecv, onExpire):
-        data["from"] = self.id
+        data["from"] = self.Id
         data["id"] = id
         eventId = self.makeId(8)
         data["event_id"] = eventId
@@ -171,7 +171,7 @@ class Bus:
             "addr": addr,
             "data": data,
             "secure": secure,
-            "from": self.id
+            "from": self.Id
         }))
 
 

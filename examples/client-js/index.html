@@ -13,7 +13,7 @@
     <button type="button" id="btn">Send</button>
     <script src="/js/Bus.js"></script>
     <script>
-        let bus = new Bus({ id: "browser" });
+        let bus = new Bus({ Id: "browser" });
         bus.OnId = (d) => {
             console.log("OnId", d)
         }
@@ -21,7 +21,7 @@
             console.log("OnData", d)
         }
         bus.OnOpen = () => {
-            console.log("connected", bus.id)
+            console.log("connected", bus.Id)
             btn.addEventListener("click", (e) => {
                 e.preventDefault();
                 bus.PublishToIDWaitRecv(inpp.value, { "cxwcwxcc": "hi from browser" }, (data) => {

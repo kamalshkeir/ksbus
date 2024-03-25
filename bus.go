@@ -16,10 +16,8 @@
 package ksbus
 
 import (
-	"sync"
 	"time"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/ksmux/ws"
 )
@@ -29,7 +27,6 @@ type Bus struct {
 	topicSubscribers *kmap.SafeMap[string, []Subscriber]
 	allWS            *kmap.SafeMap[*ws.Conn, string]
 	idConn           *kmap.SafeMap[string, *ws.Conn]
-	mu               sync.Mutex
 }
 
 // New return new Bus
@@ -87,17 +84,17 @@ func (b *Bus) Publish(topic string, data map[string]any) {
 	}
 	data["topic"] = topic
 
-	if subs, found := b.topicSubscribers.Get(topic); found {
-		for _, s := range subs {
-			if s.Ch != nil {
-				s.Ch <- data
-			} else {
-				b.mu.Lock()
-				klog.CheckError(s.Conn.WriteJSON(data))
-				b.mu.Unlock()
+	go func() {
+		if subs, found := b.topicSubscribers.Get(topic); found {
+			for _, s := range subs {
+				if s.Ch != nil {
+					s.Ch <- data
+				} else {
+					_ = s.Conn.WriteJSON(data)
+				}
 			}
 		}
-	}
+	}()
 }
 
 func (b *Bus) PublishToID(id string, data map[string]any) {
@@ -106,9 +103,7 @@ func (b *Bus) PublishToID(id string, data map[string]any) {
 	}
 	data["to_id"] = id
 	if conn, ok := b.idConn.Get(id); ok {
-		b.mu.Lock()
-		klog.CheckError(conn.WriteJSON(data))
-		b.mu.Unlock()
+		_ = conn.WriteJSON(data)
 	}
 }
 

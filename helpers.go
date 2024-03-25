@@ -44,14 +44,31 @@ func (s *Server) unsubscribeWS(topic string, wsConn *ws.Conn) {
 }
 
 func (s *Server) removeWSFromAllTopics(wsConn *ws.Conn) {
-	s.Bus.topicSubscribers.Range(func(key string, value []Subscriber) {
+	runned := false
+	s.Bus.topicSubscribers.Range(func(key string, value []Subscriber) bool {
 		for i, v := range value {
 			if v.Conn == wsConn {
 				value = append(value[:i], value[i+1:]...)
-				s.Bus.topicSubscribers.Set(key, value)
+				go s.Bus.topicSubscribers.Set(key, value)
+				if s.onWsClose != nil && !runned {
+					runned = true
+					s.onWsClose(v.Id)
+				}
 				break
 			}
 		}
+		return false
+	})
+	go s.Bus.allWS.Delete(wsConn)
+	s.Bus.idConn.Range(func(key string, value *ws.Conn) bool {
+		if value == wsConn {
+			go s.Bus.idConn.Delete(key)
+			if s.onWsClose != nil && !runned {
+				runned = true
+				s.onWsClose(key)
+			}
+		}
+		return false
 	})
 }
 
@@ -59,9 +76,8 @@ func (server *Server) AllTopics() []string {
 	return server.Bus.topicSubscribers.Keys()
 }
 
-func (server *Server) GetSubscribers(topic string) []Subscriber {
-
-	if subs, ok := server.Bus.topicSubscribers.Get(topic); ok {
+func (s *Server) GetSubscribers(topic string) []Subscriber {
+	if subs, ok := s.Bus.topicSubscribers.Get(topic); ok {
 		return subs
 	}
 	return nil

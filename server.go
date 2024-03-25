@@ -15,6 +15,7 @@ type Server struct {
 	ID                      string
 	Bus                     *Bus
 	App                     *ksmux.Router
+	onWsClose               func(connID string)
 	onDataWS                func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error
 	onServerData            func(data any, conn *ws.Conn)
 	onId                    func(data map[string]any)
@@ -36,6 +37,10 @@ func NewServer(bus ...*Bus) *Server {
 		sendToServerConnections: kmap.New[string, *ws.Conn](false),
 	}
 	return &server
+}
+
+func (s *Server) OnWsClose(fn func(connID string)) {
+	s.onWsClose = fn
 }
 
 func (s *Server) OnServerData(fn func(data any, conn *ws.Conn)) {
@@ -80,17 +85,7 @@ func (srv *Server) Publish(topic string, data map[string]any) {
 		data["from"] = srv.ID
 	}
 	data["topic"] = topic
-	if subs, ok := srv.Bus.topicSubscribers.Get(topic); ok {
-		for _, s := range subs {
-			if s.Ch != nil {
-				s.Ch <- data
-			} else {
-				srv.Bus.mu.Lock()
-				defer srv.Bus.mu.Unlock()
-				s.Conn.WriteJSON(data)
-			}
-		}
-	}
+	srv.Bus.Publish(topic, data)
 }
 
 func (s *Server) PublishToID(id string, data map[string]any) {

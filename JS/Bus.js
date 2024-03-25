@@ -13,17 +13,17 @@ class Bus {
         if (options === undefined) {
             options = {}
         }
+        if (options === undefined) {
+            options = {}
+        }
+        this.Secure = options.Secure || false;
+        this.Secure ? this.scheme = "wss://" : this.scheme = "ws://"
         this.Address = options.Address || window.location.host;
         this.Path = options.Path || "/ws/bus";
-        this.scheme = options.scheme || "ws://";
         this.fullAddress = this.scheme + this.Address + this.Path;
         this.TopicHandlers = {};
         this.Autorestart = options.Autorestart || false;
         this.RestartEvery = options.RestartEvery || 10;
-        this.Secure = options.Secure || false;
-        if (this.Secure) {
-            this.scheme = "wss://"
-        }
         this.OnOpen = () => { };
         this.OnClose = () => { };
         this.OnDataWs = (data, ws) => { };

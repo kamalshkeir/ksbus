@@ -13,9 +13,6 @@ class Bus {
         if (options === undefined) {
             options = {}
         }
-        if (options === undefined) {
-            options = {}
-        }
         this.Secure = options.Secure || false;
         this.Secure ? this.scheme = "wss://" : this.scheme = "ws://"
         this.Address = options.Address || window.location.host;

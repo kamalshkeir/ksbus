@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/ksmux/ws"
+	"github.com/kamalshkeir/lg"
 )
 
 type Client struct {
@@ -55,7 +55,7 @@ func NewClient(opts ClientConnectOptions) (*Client, error) {
 		cl.Id = GenerateUUID()
 	}
 	err := cl.connect(opts)
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return nil, err
 	}
 	return cl, nil
@@ -76,26 +76,20 @@ func (client *Client) connect(opts ClientConnectOptions) error {
 	c, resp, err := ws.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		if client.Autorestart {
-			klog.Printfs("grRestarting\n")
+			lg.Info("Restarting")
 			time.Sleep(client.RestartEvery)
 			RestartSelf()
 		}
 		if err == ws.ErrBadHandshake {
-			if DEBUG {
-				klog.Printf("rdhandshake failed with status %d \n", resp.StatusCode)
-			}
+			lg.DebugC("handshake failed with status", "status", resp.StatusCode)
 			return err
 		}
 
 		if err == ws.ErrCloseSent {
-			if DEBUG {
-				klog.Printf("rdserver connection closed with status %d \n", resp.StatusCode)
-			}
+			lg.DebugC("server connection closed with status", "status", resp.StatusCode)
 			return err
 		} else {
-			if DEBUG {
-				klog.Printf("rdNewClient error:%v\n", err)
-			}
+			lg.DebugC("NewClient error", "err", err)
 			return err
 		}
 	}
@@ -106,7 +100,8 @@ func (client *Client) connect(opts ClientConnectOptions) error {
 		"from":   client.Id,
 	})
 	client.handle()
-	klog.Printfs("client connected to %s\n", u.String())
+	lg.Printfs("client connected to %s\n", u.String())
+
 	return nil
 }
 
@@ -133,8 +128,8 @@ func (client *Client) handle() {
 				}
 			}
 		}
-		if !found && DEBUG {
-			klog.Printfs("rdclient handler for topic %s not found \n", v1)
+		if !found {
+			lg.ErrorC("client handler for topic not found", "topic", v1)
 		}
 	})
 }
@@ -149,7 +144,7 @@ func (client *Client) Subscribe(topic string, handler func(data map[string]any, 
 
 	err := client.Conn.WriteJSON(data)
 	if err != nil {
-		klog.Printf("rderror subscribing on %s %v\n", topic, err)
+		lg.Error("error subscribing", "topic", topic, "err", err)
 		return &Subscriber{
 			Id:    id,
 			Topic: topic,
@@ -172,7 +167,7 @@ func (client *Client) Unsubscribe(topic string) {
 	}
 	err := client.Conn.WriteJSON(data)
 	if err != nil {
-		klog.Printf("rderror unsubscribing on %s %v %v\n", topic, err, data)
+		lg.Error("error unsub", "topic", topic, "err", err, "data", data)
 		return
 	}
 }
@@ -279,7 +274,7 @@ func (client *Client) RemoveTopic(topic string) {
 	}
 	err := client.Conn.WriteJSON(data)
 	if err != nil {
-		klog.Printf("rderror RemoveTopic, data: %v err :%v\n", data, err)
+		lg.ErrorC("error RemoveTopic", "err", err, "data", data)
 		return
 	}
 	client.topicHandlers.Delete(topic)
@@ -307,7 +302,7 @@ func (client *Client) Run() {
 		case <-client.Done:
 			return
 		case <-interrupt:
-			klog.Printf("rdinterrupt\n")
+			lg.Info("Closed")
 			client.Close()
 			return
 		}
@@ -323,19 +318,16 @@ func (client *Client) handleData(fn func(data map[string]any, sub *Subscriber)) 
 				err := client.Conn.ReadJSON(&message)
 				if err != nil && (err == ws.ErrCloseSent || strings.Contains(err.Error(), "forcibly closed")) {
 					if client.Autorestart {
-						klog.Printfs("grRestarting\n")
+						lg.Printfs("grRestarting\n")
 						time.Sleep(client.RestartEvery)
 						RestartSelf()
 					} else {
-						klog.Printfs("rdClosed connection error:%v\n", err)
+						lg.Printfs("rdClosed connection error:%v\n", err)
 						return
 					}
 				} else if err != nil {
-					klog.Printfs("rdOnData error:%v\n", err)
+					lg.Printfs("rdOnData error:%v\n", err)
 					return
-				}
-				if DEBUG {
-					klog.Printfs("client handleData recv: %v\n", message)
 				}
 				err = client.onDataWS(message, client.Conn)
 				if err == nil {
@@ -348,7 +340,7 @@ func (client *Client) handleData(fn func(data map[string]any, sub *Subscriber)) 
 					fn(message, &sub)
 				}
 			} else {
-				klog.Printfs("rdhandleData error: no connection\n")
+				lg.Printfs("rdhandleData error: no connection\n")
 				return
 			}
 		}

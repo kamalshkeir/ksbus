@@ -7,7 +7,6 @@ import (
 type M map[string]any
 
 var (
-	DEBUG         = false
 	CLIENT_SECURE = false
 	ServerPath    = "/ws/bus"
 	LocalAddress  = ""

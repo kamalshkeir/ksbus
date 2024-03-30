@@ -14,7 +14,7 @@ KSBus is a zero-configuration event bus written in Go, designed to facilitate re
 To install KSBus, use the following command:
 
 ```sh
-go get github.com/kamalshkeir/ksbus@v1.3.1
+go get github.com/kamalshkeir/ksbus@v1.3.2
 ```
 
 ## Usage
@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/lg"
 	"github.com/kamalshkeir/ksbus"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/ksmux/ws"
@@ -43,7 +43,7 @@ func main() {
 	
     app := bus.App // get router
 	app.LocalStatics("JS", "/js") //server static dir
-	klog.CheckError(app.LocalTemplates("examples/client-js")) // handle templates dir
+	lg.CheckError(app.LocalTemplates("examples/client-js")) // handle templates dir
 
 	bus.OnDataWs(func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error {
 		fmt.Println("srv OnDataWS:", data)
@@ -143,7 +143,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/kamalshkeir/klog"
+	"github.com/kamalshkeir/lg"
 	"github.com/kamalshkeir/ksbus"
 	"github.com/kamalshkeir/ksmux/ws"
 )
@@ -160,7 +160,7 @@ func main() {
 			fmt.Println("ON OnId:", data)
 		},
 	})
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 

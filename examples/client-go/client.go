@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/ksbus"
 	"github.com/kamalshkeir/ksmux/ws"
+	"github.com/kamalshkeir/lg"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 			fmt.Println("ON OnId:", data)
 		},
 	})
-	if klog.CheckError(err) {
+	if lg.CheckError(err) {
 		return
 	}
 

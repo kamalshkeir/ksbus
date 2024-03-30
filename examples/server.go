@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/ksbus"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/ksmux/ws"
+	"github.com/kamalshkeir/lg"
 )
 
 func main() {
@@ -16,7 +16,7 @@ func main() {
 	app := bus.App
 
 	app.LocalStatics("JS", "/js")
-	klog.CheckError(app.LocalTemplates("examples/client-js"))
+	lg.CheckError(app.LocalTemplates("examples/client-js"))
 
 	bus.OnDataWs(func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error {
 		fmt.Println("srv OnDataWS:", data)

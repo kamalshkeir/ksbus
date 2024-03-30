@@ -4,9 +4,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/ksmux/ws"
+	"github.com/kamalshkeir/lg"
 )
 
 func (s *Server) subscribeWS(id, topic string, conn *ws.Conn) {
@@ -87,22 +87,16 @@ func (server *Server) handleWS() {
 	ws.FuncBeforeUpgradeWS = OnUpgradeWS
 	server.App.Get(ServerPath, func(c *ksmux.Context) {
 		conn, err := ksmux.UpgradeConnection(c.ResponseWriter, c.Request, nil)
-		if klog.CheckError(err) {
+		if lg.CheckError(err) {
 			return
 		}
 		for {
 			var m map[string]any
 			err := conn.ReadJSON(&m)
 			if err != nil {
-				if DEBUG {
-					klog.Printf("rd%v\n", err)
-				}
+				lg.DebugC(err.Error())
 				server.removeWSFromAllTopics(conn)
 				break
-			}
-			if DEBUG {
-				klog.Printfs("--------------------------------\n")
-				klog.Printfs("yl%v \n", m)
 			}
 			if server.onDataWS != nil {
 				if err := server.onDataWS(m, conn, c.Request); err != nil {
@@ -344,7 +338,7 @@ func RetryEvery(t time.Duration, function func() error, maxRetry ...int) {
 			if i < maxRetry[0] {
 				err = function()
 			} else {
-				klog.Printf("stoping retry after %v times\n")
+				lg.Info("max retry exceeded", "max", maxRetry)
 				break
 			}
 		} else {

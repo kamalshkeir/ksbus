@@ -5,10 +5,10 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/kamalshkeir/klog"
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/ksmux"
 	"github.com/kamalshkeir/ksmux/ws"
+	"github.com/kamalshkeir/lg"
 )
 
 type Server struct {
@@ -63,9 +63,6 @@ func (s *Server) WithMetrics(httpHandler http.Handler, path ...string) {
 }
 
 func (s *Server) Subscribe(topic string, fn func(data map[string]any, unsub Unsub)) (unsub Unsub) {
-	if DEBUG {
-		klog.Printfs("grSubscribing to topic %s\n", topic)
-	}
 	return s.Bus.Subscribe(topic, fn, func(data map[string]any) {
 		if eventID, ok := data["event_id"]; ok {
 			s.Publish(eventID.(string), map[string]any{
@@ -163,10 +160,6 @@ func (s *Server) RemoveTopic(topic string) {
 }
 
 func (s *Server) PublishToServer(addr string, data map[string]any, secure ...bool) error {
-	if DEBUG {
-		klog.Printfs("grSendToServer: sending %v on %s \n", data, addr)
-	}
-
 	sch := "ws"
 	if len(secure) > 0 && secure[0] {
 		sch = "wss"
@@ -177,7 +170,7 @@ func (s *Server) PublishToServer(addr string, data map[string]any, secure ...boo
 		var err error
 		conn, _, err = ws.DefaultDialer.Dial(u.String(), nil)
 		if err != nil {
-			klog.Printfs("rdSendToServer Dial %s error:%v\n", u.String(), err)
+			lg.Printfs("rdSendToServer Dial %s error:%v\n", u.String(), err)
 			return err
 		}
 	}
@@ -188,7 +181,7 @@ func (s *Server) PublishToServer(addr string, data map[string]any, secure ...boo
 		"via_server": s.ID,
 	}
 	if err := conn.WriteJSON(dd); err != nil {
-		klog.Printfs("rdSendToServer WriteJSON on %s error:%v\n", u.String(), err)
+		lg.Printfs("rdSendToServer WriteJSON on %s error:%v\n", u.String(), err)
 		return err
 	}
 	return nil

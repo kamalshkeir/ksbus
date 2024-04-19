@@ -14,7 +14,7 @@ KSBus is a zero-configuration event bus written in Go, designed to facilitate re
 To install KSBus, use the following command:
 
 ```sh
-go get github.com/kamalshkeir/ksbus@v1.3.2
+go get github.com/kamalshkeir/ksbus@v1.3.3
 ```
 
 ## Usage
@@ -37,7 +37,13 @@ import (
 )
 
 func main() {
-	bus := ksbus.NewServer()
+	bus := ksbus.NewServer(ksbus.ServerOpts{
+		Address: ":9313",
+		// OnDataWS: func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error {
+		// 	fmt.Println("srv OnDataWS:", data)
+		// 	return nil
+		// },
+	})
     // bus.Id = "server-9313"
     fmt.Println("connected as",bus.Id)
 	
@@ -73,7 +79,7 @@ func main() {
 	})
 
 	fmt.Println("server1 connected as", bus.ID)
-	bus.Run(":9313")
+	bus.Run()
 }
 ```
 
@@ -152,6 +158,7 @@ func main() {
 	client, err := ksbus.NewClient(ksbus.ClientConnectOptions{
 		Id:      "go-client",
 		Address: "localhost:9313",
+        Secure: false,
 		OnDataWs: func(data map[string]any, conn *ws.Conn) error {
 			fmt.Println("ON OnDataWs:", data)
 			return nil
@@ -274,9 +281,9 @@ func (s *Server) RemoveTopic(topic string)
 func (s *Server) PublishToServer(addr string, data map[string]any, secure ...bool) error // send to another ksbus server
 
 
-func (s *Server) Run(addr string) // Run without TLS
-func (s *Server) RunTLS(addr string, cert string, certKey string) // RunTLS with TLS from cert files
-func (s *Server) RunAutoTLS(domainName string, subDomains ...string) // RunAutoTLS generate letsencrypt certificates and renew it automaticaly before expire, so you only need to provide a domainName. 
+func (s *Server) Run() // Run without TLS
+func (s *Server) RunTLS(cert string, certKey string) // RunTLS with TLS from cert files
+func (s *Server) RunAutoTLS(subDomains ...string) // RunAutoTLS generate letsencrypt certificates for server.Address and subDomains and renew them automaticaly before expire, so you only need to provide a domainName(server.Address). 
 ```
 
 ### Client Bus GO

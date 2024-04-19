@@ -63,13 +63,14 @@ func NewClient(opts ClientConnectOptions) (*Client, error) {
 
 func (client *Client) connect(opts ClientConnectOptions) error {
 	sch := "ws"
-	if CLIENT_SECURE || opts.Secure {
-		CLIENT_SECURE = true
+	if opts.Secure {
 		sch = "wss"
 	}
-	spath := ServerPath
+	spath := ""
 	if opts.Path != "" {
 		spath = opts.Path
+	} else {
+		spath = "/ws/bus"
 	}
 	u := url.URL{Scheme: sch, Host: opts.Address, Path: spath}
 	client.ServerAddr = u.String()

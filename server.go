@@ -13,6 +13,8 @@ import (
 
 type Server struct {
 	ID                      string
+	Address                 string
+	Path                    string
 	Bus                     *Bus
 	App                     *ksmux.Router
 	onWsClose               func(connID string)
@@ -20,22 +22,72 @@ type Server struct {
 	onServerData            func(data any, conn *ws.Conn)
 	onId                    func(data map[string]any)
 	sendToServerConnections *kmap.SafeMap[string, *ws.Conn]
+	beforeUpgradeWs         func(r *http.Request) bool
 }
 
-func NewServer(bus ...*Bus) *Server {
-	var b *Bus
-	if len(bus) > 0 {
-		b = bus[0]
+type ServerOpts struct {
+	ID              string
+	Address         string
+	Path            string
+	OnWsClose       func(connID string)
+	OnDataWS        func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error
+	OnServerData    func(data any, conn *ws.Conn)
+	OnId            func(data map[string]any)
+	OnUpgradeWs     func(r *http.Request) bool
+	WithOtherRouter *ksmux.Router
+	WithOtherBus    *Bus
+}
+
+func NewDefaultServerOptions() ServerOpts {
+	return ServerOpts{
+		ID:              GenerateUUID(),
+		Address:         ":9313",
+		Path:            "/ws/bus",
+		WithOtherRouter: ksmux.New(),
+		WithOtherBus:    New(),
+		OnUpgradeWs:     func(r *http.Request) bool { return true },
+	}
+}
+
+func NewServer(options ...ServerOpts) *Server {
+	var opts ServerOpts
+	if len(options) == 0 {
+		opts = NewDefaultServerOptions()
 	} else {
-		b = New()
+		opts = options[0]
 	}
-	app := ksmux.New()
+	if opts.ID == "" {
+		opts.ID = GenerateUUID()
+	}
+	if opts.Address == "" {
+		opts.Address = ":9313"
+	}
+	if opts.Path == "" {
+		opts.Path = "/ws/bus"
+	}
+	if opts.WithOtherBus == nil {
+		opts.WithOtherBus = New()
+	}
+	if opts.OnUpgradeWs == nil {
+		opts.OnUpgradeWs = func(r *http.Request) bool { return true }
+	}
+	if opts.WithOtherRouter == nil {
+		opts.WithOtherRouter = ksmux.New()
+	}
 	server := Server{
-		ID:                      GenerateUUID(),
-		Bus:                     b,
-		App:                     app,
+		ID:                      opts.ID,
+		Address:                 opts.Address,
+		Path:                    opts.Path,
+		Bus:                     opts.WithOtherBus,
+		App:                     opts.WithOtherRouter,
 		sendToServerConnections: kmap.New[string, *ws.Conn](false),
+		onWsClose:               opts.OnWsClose,
+		onDataWS:                opts.OnDataWS,
+		onServerData:            opts.OnServerData,
+		onId:                    opts.OnId,
+		beforeUpgradeWs:         opts.OnUpgradeWs,
 	}
+	server.handleWS()
 	return &server
 }
 
@@ -164,7 +216,7 @@ func (s *Server) PublishToServer(addr string, data map[string]any, secure ...boo
 	if len(secure) > 0 && secure[0] {
 		sch = "wss"
 	}
-	u := url.URL{Scheme: sch, Host: addr, Path: ServerPath}
+	u := url.URL{Scheme: sch, Host: addr, Path: s.Path}
 	conn, ok := s.sendToServerConnections.Get(addr)
 	if !ok {
 		var err error
@@ -188,20 +240,14 @@ func (s *Server) PublishToServer(addr string, data map[string]any, secure ...boo
 }
 
 // RUN
-func (s *Server) Run(addr string) {
-	LocalAddress = addr
-	s.handleWS()
-	s.App.Run(addr)
+func (s *Server) Run() {
+	s.App.Run(s.Address)
 }
 
-func (s *Server) RunTLS(addr string, cert string, certKey string) {
-	LocalAddress = addr
-	s.handleWS()
-	s.App.RunTLS(addr, cert, certKey)
+func (s *Server) RunTLS(cert string, certKey string) {
+	s.App.RunTLS(s.Address, cert, certKey)
 }
 
-func (s *Server) RunAutoTLS(domainName string, subDomains ...string) {
-	LocalAddress = domainName
-	s.handleWS()
-	s.App.RunAutoTLS(domainName, subDomains...)
+func (s *Server) RunAutoTLS(subDomains ...string) {
+	s.App.RunAutoTLS(s.Address, subDomains...)
 }

@@ -84,8 +84,8 @@ func (s *Server) GetSubscribers(topic string) []Subscriber {
 }
 
 func (server *Server) handleWS() {
-	ws.FuncBeforeUpgradeWS = OnUpgradeWS
-	server.App.Get(ServerPath, func(c *ksmux.Context) {
+	ws.FuncBeforeUpgradeWS = server.beforeUpgradeWs
+	server.App.Get(server.Path, func(c *ksmux.Context) {
 		conn, err := ksmux.UpgradeConnection(c.ResponseWriter, c.Request, nil)
 		if lg.CheckError(err) {
 			return
@@ -178,7 +178,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 		case "server_message", "serverMessage":
 			if server.onServerData != nil {
 				if data, ok := m["data"]; ok {
-					if addr, ok := m["addr"]; ok && strings.Contains(addr.(string), LocalAddress) {
+					if addr, ok := m["addr"]; ok && strings.Contains(addr.(string), server.Address) {
 						server.onServerData(data, conn)
 					}
 				}
@@ -239,7 +239,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 						"data": v,
 					}
 					if addr, ok := m["addr"].(string); ok {
-						if strings.Contains(addr, LocalAddress) {
+						if strings.Contains(addr, server.Address) {
 							server.onServerData(mm, conn)
 							return
 						}
@@ -261,7 +261,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					}
 				case map[string]any:
 					if addr, ok := m["addr"].(string); ok {
-						if strings.Contains(addr, LocalAddress) {
+						if strings.Contains(addr, server.Address) {
 							server.onServerData(m, conn)
 							return
 						}

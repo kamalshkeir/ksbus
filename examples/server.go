@@ -11,7 +11,13 @@ import (
 )
 
 func main() {
-	bus := ksbus.NewServer()
+	bus := ksbus.NewServer(ksbus.ServerOpts{
+		Address: ":9313",
+		// OnDataWS: func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error {
+		// 	fmt.Println("srv OnDataWS:", data)
+		// 	return nil
+		// },
+	})
 
 	app := bus.App
 
@@ -44,6 +50,5 @@ func main() {
 	})
 
 	fmt.Println("server1 connected as", bus.ID)
-	bus.Run(":9313")
-
+	bus.Run()
 }

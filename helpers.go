@@ -85,7 +85,17 @@ func (s *Server) GetSubscribers(topic string) []Subscriber {
 
 func (server *Server) handleWS() {
 	ws.FuncBeforeUpgradeWS = server.beforeUpgradeWs
-	server.App.Get(server.Path, func(c *ksmux.Context) {
+	handler := handlerBusWs(server)
+	if len(server.busMidws) > 0 {
+		for _, h := range server.busMidws {
+			handler = h(handler)
+		}
+	}
+	server.App.Get(server.Path, handler)
+}
+
+func handlerBusWs(server *Server) ksmux.Handler {
+	return func(c *ksmux.Context) {
 		conn, err := ksmux.UpgradeConnection(c.ResponseWriter, c.Request, nil)
 		if lg.CheckError(err) {
 			return
@@ -108,7 +118,7 @@ func (server *Server) handleWS() {
 			}
 			server.handleActions(m, conn)
 		}
-	})
+	}
 }
 
 func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {

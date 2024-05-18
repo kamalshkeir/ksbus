@@ -17,6 +17,7 @@ type Server struct {
 	Path                    string
 	Bus                     *Bus
 	App                     *ksmux.Router
+	busMidws                []func(ksmux.Handler) ksmux.Handler
 	onWsClose               func(connID string)
 	onDataWS                func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error
 	onServerData            func(data any, conn *ws.Conn)
@@ -29,6 +30,7 @@ type ServerOpts struct {
 	ID              string
 	Address         string
 	Path            string
+	BusMidws        []func(ksmux.Handler) ksmux.Handler
 	OnWsClose       func(connID string)
 	OnDataWS        func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error
 	OnServerData    func(data any, conn *ws.Conn)
@@ -86,6 +88,9 @@ func NewServer(options ...ServerOpts) *Server {
 		onServerData:            opts.OnServerData,
 		onId:                    opts.OnId,
 		beforeUpgradeWs:         opts.OnUpgradeWs,
+	}
+	if len(opts.BusMidws) > 0 {
+		server.busMidws = opts.BusMidws
 	}
 	server.handleWS()
 	return &server

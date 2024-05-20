@@ -46,7 +46,7 @@ func NewClient(opts ClientConnectOptions) (*Client, error) {
 		Id:            opts.Id,
 		Autorestart:   opts.Autorestart,
 		RestartEvery:  opts.RestartEvery,
-		topicHandlers: kmap.New[string, func(map[string]any, Unsub)](false),
+		topicHandlers: kmap.New[string, func(map[string]any, Unsub)](),
 		onDataWS:      opts.OnDataWs,
 		onId:          opts.OnId,
 		Done:          make(chan struct{}),

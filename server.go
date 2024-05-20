@@ -82,7 +82,7 @@ func NewServer(options ...ServerOpts) *Server {
 		Path:                    opts.Path,
 		Bus:                     opts.WithOtherBus,
 		App:                     opts.WithOtherRouter,
-		sendToServerConnections: kmap.New[string, *ws.Conn](false),
+		sendToServerConnections: kmap.New[string, *ws.Conn](),
 		onWsClose:               opts.OnWsClose,
 		onDataWS:                opts.OnDataWS,
 		onServerData:            opts.OnServerData,

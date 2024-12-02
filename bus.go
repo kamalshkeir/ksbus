@@ -87,17 +87,19 @@ func (b *Bus) Publish(topic string, data map[string]any) {
 	data["topic"] = topic
 
 	if subs, found := b.topicSubscribers.Get(topic); found {
-		b.mu.Lock()
-		defer b.mu.Unlock()
 		for _, s := range subs {
 			if s.Ch != nil {
-				s.Ch <- data
-			} else {
+				select {
+				case s.Ch <- data:
+				case <-time.After(100 * time.Millisecond):
+				}
+			} else if s.Conn != nil {
+				b.mu.Lock()
+				defer b.mu.Unlock()
 				_ = s.Conn.WriteJSON(data)
 			}
 		}
 	}
-
 }
 
 func (b *Bus) PublishToID(id string, data map[string]any) {

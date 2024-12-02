@@ -16,12 +16,12 @@ type Client struct {
 	Id            string
 	ServerAddr    string
 	onDataWS      func(data map[string]any, conn *ws.Conn) error
-	onId          func(data map[string]any, unsub Unsub)
+	onId          func(data map[string]any, unsub ClientSubscriber)
 	RestartEvery  time.Duration
 	Conn          *ws.Conn
 	Autorestart   bool
 	Done          chan struct{}
-	topicHandlers *kmap.SafeMap[string, func(map[string]any, Unsub)]
+	topicHandlers *kmap.SafeMap[string, func(map[string]any, ClientSubscriber)]
 }
 
 type ClientConnectOptions struct {
@@ -32,7 +32,19 @@ type ClientConnectOptions struct {
 	Autorestart  bool
 	RestartEvery time.Duration
 	OnDataWs     func(data map[string]any, conn *ws.Conn) error
-	OnId         func(data map[string]any, unsub Unsub) // used when client bus receive data on his ID 'client.Id'
+	OnId         func(data map[string]any, unsub ClientSubscriber) // used when client bus receive data on his ID 'client.Id'
+}
+
+type ClientSubscriber struct {
+	client *Client
+	Id     string
+	Topic  string
+	Ch     chan map[string]any
+	Conn   *ws.Conn
+}
+
+func (subs ClientSubscriber) Unsubscribe() {
+	subs.client.Unsubscribe(subs.Topic)
 }
 
 func NewClient(opts ClientConnectOptions) (*Client, error) {
@@ -46,7 +58,7 @@ func NewClient(opts ClientConnectOptions) (*Client, error) {
 		Id:            opts.Id,
 		Autorestart:   opts.Autorestart,
 		RestartEvery:  opts.RestartEvery,
-		topicHandlers: kmap.New[string, func(map[string]any, Unsub)](),
+		topicHandlers: kmap.New[string, func(map[string]any, ClientSubscriber)](),
 		onDataWS:      opts.OnDataWs,
 		onId:          opts.OnId,
 		Done:          make(chan struct{}),
@@ -107,7 +119,7 @@ func (client *Client) connect(opts ClientConnectOptions) error {
 }
 
 func (client *Client) handle() {
-	client.handleData(func(data map[string]any, sub *Subscriber) {
+	client.handleData(func(data map[string]any, sub ClientSubscriber) {
 		if v, ok := data["to_id"]; ok && client.onId != nil && v.(string) == client.Id {
 			delete(data, "to_id")
 			client.onId(data, sub)
@@ -129,13 +141,22 @@ func (client *Client) handle() {
 				}
 			}
 		}
+		if dd, ok := data["data"]; ok {
+			if dd == "pong" {
+				lg.Info("connected to server bus with success")
+				return
+			}
+		}
 		if !found {
-			lg.ErrorC("client handler for topic not found", "topic", v1)
+			err := client.onDataWS(data, client.Conn)
+			if lg.CheckError(err) {
+				return
+			}
 		}
 	})
 }
 
-func (client *Client) Subscribe(topic string, handler func(data map[string]any, unsub Unsub)) Unsub {
+func (client *Client) Subscribe(topic string, handler func(data map[string]any, unsub ClientSubscriber)) ClientSubscriber {
 	id := client.Id
 	data := map[string]any{
 		"action": "sub",
@@ -146,17 +167,19 @@ func (client *Client) Subscribe(topic string, handler func(data map[string]any, 
 	err := client.Conn.WriteJSON(data)
 	if err != nil {
 		lg.Error("error subscribing", "topic", topic, "err", err)
-		return &Subscriber{
-			Id:    id,
-			Topic: topic,
-			Conn:  client.Conn,
+		return ClientSubscriber{
+			client: client,
+			Id:     id,
+			Topic:  topic,
+			Conn:   client.Conn,
 		}
 	}
 	client.topicHandlers.Set(topic, handler)
-	return &Subscriber{
-		Id:    id,
-		Topic: topic,
-		Conn:  client.Conn,
+	return ClientSubscriber{
+		client: client,
+		Id:     id,
+		Topic:  topic,
+		Conn:   client.Conn,
 	}
 }
 
@@ -214,7 +237,7 @@ func (client *Client) PublishWaitRecv(topic string, data map[string]any, onRecv 
 	data["topic"] = topic
 	done := make(chan struct{})
 
-	cs := client.Subscribe(eventId, func(data map[string]any, unsub Unsub) {
+	cs := client.Subscribe(eventId, func(data map[string]any, unsub ClientSubscriber) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
@@ -244,7 +267,7 @@ func (client *Client) PublishToIDWaitRecv(id string, data map[string]any, onRecv
 	data["id"] = id
 	done := make(chan struct{})
 
-	cs := client.Subscribe(eventId, func(data map[string]any, unsub Unsub) {
+	cs := client.Subscribe(eventId, func(data map[string]any, unsub ClientSubscriber) {
 		done <- struct{}{}
 		if onRecv != nil {
 			onRecv(data)
@@ -310,7 +333,7 @@ func (client *Client) Run() {
 	}
 }
 
-func (client *Client) handleData(fn func(data map[string]any, sub *Subscriber)) {
+func (client *Client) handleData(fn func(data map[string]any, sub ClientSubscriber)) {
 	go func() {
 		defer close(client.Done)
 		for {
@@ -332,13 +355,14 @@ func (client *Client) handleData(fn func(data map[string]any, sub *Subscriber)) 
 				}
 				err = client.onDataWS(message, client.Conn)
 				if err == nil {
-					sub := Subscriber{
-						Conn: client.Conn,
+					sub := ClientSubscriber{
+						client: client,
+						Conn:   client.Conn,
 					}
 					if v, ok := message["topic"]; ok {
 						sub.Topic = v.(string)
 					}
-					fn(message, &sub)
+					fn(message, sub)
 				}
 			} else {
 				lg.Printfs("rdhandleData error: no connection\n")

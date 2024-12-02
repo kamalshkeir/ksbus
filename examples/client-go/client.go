@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/kamalshkeir/ksbus"
-	"github.com/kamalshkeir/ksmux/ws"
 	"github.com/kamalshkeir/lg"
 )
 
@@ -12,13 +11,13 @@ func main() {
 	client, err := ksbus.NewClient(ksbus.ClientConnectOptions{
 		Id:      "go-client",
 		Address: "localhost:9313",
-		OnDataWs: func(data map[string]any, conn *ws.Conn) error {
-			fmt.Println("ON OnDataWs:", data)
-			return nil
-		},
-		OnId: func(data map[string]any, subs ksbus.Unsub) {
-			fmt.Println("ON OnId:", data)
-		},
+		// OnDataWs: func(data map[string]any, conn *ws.Conn) error {
+		// 	fmt.Println("ON OnDataWs:", data)
+		// 	return nil
+		// },
+		// OnId: func(data map[string]any, subs ksbus.Unsub) {
+		// 	fmt.Println("ON OnId:", data)
+		// },
 	})
 	if lg.CheckError(err) {
 		return
@@ -26,7 +25,7 @@ func main() {
 
 	fmt.Println("CLIENT connected as", client.Id)
 
-	client.Subscribe("go-client", func(data map[string]any, sub ksbus.Unsub) {
+	client.Subscribe("go-client", func(data map[string]any, sub ksbus.ClientSubscriber) {
 		fmt.Println("ON sub go-client:", data)
 	})
 
@@ -37,7 +36,7 @@ func main() {
 	client.PublishToIDWaitRecv("browser", map[string]any{
 		"data": "hello from go client",
 	}, func(data map[string]any) {
-		fmt.Println("onRecv:", data)
+		fmt.Println("client received data:", data)
 	}, func(eventId, id string) {
 		fmt.Println("not received:", eventId, id)
 	})

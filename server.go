@@ -1,11 +1,14 @@
 package ksbus
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/rpc"
 	"net/url"
 	"time"
+
+	"encoding/gob"
 
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/ksmux"
@@ -27,8 +30,13 @@ type Server struct {
 	sendToServerConnections *kmap.SafeMap[string, *ws.Conn]
 	beforeUpgradeWs         func(r *http.Request) bool
 	rpcServer               *rpc.Server
-	rpcMessages             *kmap.SafeMap[string, []map[string]any]
+	idConnRPC               *kmap.SafeMap[string, *RPCConn]
 	rpcMaxQueueSize         int
+}
+
+type RPCConn struct {
+	Id      string
+	msgChan chan map[string]any
 }
 
 type WithRpc struct {
@@ -98,7 +106,7 @@ func NewServer(options ...ServerOpts) *Server {
 		onServerData:            opts.OnServerData,
 		onId:                    opts.OnId,
 		beforeUpgradeWs:         opts.OnUpgradeWs,
-		rpcMessages:             kmap.New[string, []map[string]any](),
+		idConnRPC:               kmap.New[string, *RPCConn](),
 		rpcMaxQueueSize:         1000,
 	}
 	if len(opts.BusMidws) > 0 {
@@ -165,6 +173,26 @@ func (s *Server) PublishToID(id string, data map[string]any) {
 	if _, ok := data["from"]; !ok {
 		data["from"] = s.ID
 	}
+
+	if rpcConn, ok := s.idConnRPC.Get(id); ok {
+		msg := map[string]any{
+			"to_id": id,
+			"from":  data["from"],
+		}
+		for k, v := range data {
+			if k != "to_id" && k != "from" {
+				msg[k] = v
+			}
+		}
+		select {
+		case rpcConn.msgChan <- msg:
+		default:
+			<-rpcConn.msgChan
+			rpcConn.msgChan <- msg
+		}
+		return
+	}
+
 	s.Bus.PublishToID(id, data)
 }
 
@@ -277,8 +305,10 @@ func (s *Server) RunAutoTLS(subDomains ...string) {
 }
 
 func (s *Server) EnableRPC(address string) error {
+	// Register types for gob encoding
+	gob.Register(map[string]interface{}{})
+
 	s.rpcServer = rpc.NewServer()
-	s.rpcMessages = kmap.New[string, []map[string]any]()
 
 	busRPC := &BusRPC{server: s}
 	err := s.rpcServer.RegisterName("BusRPC", busRPC)
@@ -302,44 +332,36 @@ type BusRPC struct {
 }
 
 func (b *BusRPC) Ping(req *RPCRequest, resp *RPCResponse) error {
-	// Initialize message queue for new client
-	if _, ok := b.server.rpcMessages.Get(req.From); !ok {
-		b.server.rpcMessages.Set(req.From, []map[string]any{})
+	if _, ok := b.server.idConnRPC.Get(req.From); !ok {
+		rpcConn := &RPCConn{
+			Id:      req.From,
+			msgChan: make(chan map[string]any, b.server.rpcMaxQueueSize),
+		}
+		b.server.idConnRPC.Set(req.From, rpcConn)
 	}
 	return nil
 }
 
 func (b *BusRPC) Subscribe(req *RPCRequest, resp *RPCResponse) error {
-	// Initialize empty message queue if not exists
-	if _, ok := b.server.rpcMessages.Get(req.From); !ok {
-		b.server.rpcMessages.Set(req.From, []map[string]any{})
+	rpcConn, ok := b.server.idConnRPC.Get(req.From)
+	if !ok {
+		return fmt.Errorf("client not registered")
 	}
 
-	b.server.Bus.Subscribe(req.Topic, func(data map[string]any, unsub Unsub) {
-		messages, _ := b.server.rpcMessages.Get(req.From)
-		if len(messages) >= b.server.rpcMaxQueueSize {
-			messages = messages[len(messages)-b.server.rpcMaxQueueSize+1:]
-		}
-		messages = append(messages, data)
-		b.server.rpcMessages.Set(req.From, messages)
-	}, func(data map[string]any) {
-		if eventID, ok := data["event_id"]; ok {
-			b.server.Bus.Publish(eventID.(string), map[string]any{
-				"ok":   "done",
-				"from": req.From,
-			})
-		}
-	})
-
-	// Store subscription for cleanup
-	if subs, ok := b.server.Bus.topicSubscribers.Get(req.Topic); ok {
-		for i := range subs {
-			if subs[i].Id == req.From {
-				resp.Data = map[string]any{"status": "already subscribed"}
-				return nil
-			}
-		}
+	sub := Subscriber{
+		bus:   b.server.Bus,
+		Id:    req.From,
+		Topic: req.Topic,
+		Ch:    rpcConn.msgChan,
 	}
+
+	if subs, found := b.server.Bus.topicSubscribers.Get(req.Topic); found {
+		subs = append(subs, sub)
+		b.server.Bus.topicSubscribers.Set(req.Topic, subs)
+	} else {
+		b.server.Bus.topicSubscribers.Set(req.Topic, []Subscriber{sub})
+	}
+
 	return nil
 }
 
@@ -349,19 +371,6 @@ func (b *BusRPC) Unsubscribe(req *RPCRequest, resp *RPCResponse) error {
 			if subs[i].Id == req.From {
 				subs = append(subs[:i], subs[i+1:]...)
 				b.server.Bus.topicSubscribers.Set(req.Topic, subs)
-				// Clear any pending messages for this topic
-				if messages, ok := b.server.rpcMessages.Get(req.From); ok {
-					filtered := make([]map[string]any, 0)
-					for _, msg := range messages {
-						if t, ok := msg["topic"].(string); !ok || t != req.Topic {
-							filtered = append(filtered, msg)
-						}
-					}
-					b.server.rpcMessages.Set(req.From, filtered)
-				}
-				if subs, ok := b.server.Bus.topicSubscribers.Get(req.Topic); !ok || len(subs) == 0 {
-					b.server.rpcMessages.Delete(req.From)
-				}
 				break
 			}
 		}
@@ -370,32 +379,100 @@ func (b *BusRPC) Unsubscribe(req *RPCRequest, resp *RPCResponse) error {
 }
 
 func (b *BusRPC) Publish(req *RPCRequest, resp *RPCResponse) error {
-	b.server.Bus.Publish(req.Topic, req.Data)
+	req.Data["from"] = req.From
+	msg := map[string]any{
+		"from":  req.From,
+		"topic": req.Topic,
+	}
+	// Copy all other fields
+	for k, v := range req.Data {
+		if k != "from" && k != "topic" {
+			msg[k] = v
+		}
+	}
+
+	// Handle RPC subscribers for this topic
+	if subs, ok := b.server.Bus.topicSubscribers.Get(req.Topic); ok {
+		for _, sub := range subs {
+			if sub.Ch != nil { // RPC subscriber
+				select {
+				case sub.Ch <- msg:
+				default:
+					// Channel full, remove oldest message
+					<-sub.Ch
+					sub.Ch <- msg
+				}
+			}
+		}
+	}
+
+	b.server.Bus.Publish(req.Topic, msg)
 	return nil
 }
 
 func (b *BusRPC) PublishToID(req *RPCRequest, resp *RPCResponse) error {
-	b.server.Bus.PublishToID(req.Id, req.Data)
+	req.Data["from"] = req.From
+	msg := map[string]any{
+		"to_id": req.Id,
+		"from":  req.From,
+	}
+	for k, v := range req.Data {
+		if k != "to_id" && k != "from" {
+			msg[k] = v
+		}
+	}
+
+	if eventID, ok := req.Data["event_id"]; ok {
+		msg["event_id"] = eventID
+	}
+
+	if req.Id == b.server.ID {
+		if b.server.onId != nil {
+			b.server.onId(msg)
+			if eventID, ok := msg["event_id"]; ok {
+				b.server.Bus.Publish(eventID.(string), map[string]any{
+					"ok":   "done",
+					"from": b.server.ID,
+				})
+			}
+			return nil
+		}
+	}
+
+	if rpcConn, ok := b.server.idConnRPC.Get(req.Id); ok {
+		select {
+		case rpcConn.msgChan <- msg:
+		default:
+			<-rpcConn.msgChan
+			rpcConn.msgChan <- msg
+		}
+		return nil
+	}
+
+	b.server.Bus.PublishToID(req.Id, msg)
 	return nil
 }
 
 func (b *BusRPC) RemoveTopic(req *RPCRequest, resp *RPCResponse) error {
+	req.Data["from"] = req.From
 	b.server.Bus.RemoveTopic(req.Topic)
 	return nil
 }
 
 func (b *BusRPC) Poll(req *RPCRequest, resp *RPCResponse) error {
-	if messages, ok := b.server.rpcMessages.Get(req.From); ok && len(messages) > 0 {
-		resp.Data = messages[0]
-		// Remove the delivered message
-		b.server.rpcMessages.Set(req.From, messages[1:])
-		if len(messages) == 1 {
-			b.server.rpcMessages.Delete(req.From)
-		}
+	rpcConn, ok := b.server.idConnRPC.Get(req.From)
+	if !ok {
+		return fmt.Errorf("client not registered")
+	}
+
+	select {
+	case msg := <-rpcConn.msgChan:
+		resp.Data = msg
+		return nil
+	default:
+		resp.Data = nil
 		return nil
 	}
-	resp.Data = nil
-	return nil
 }
 
 func (s *Server) SetRPCMaxQueueSize(size int) {

@@ -11,9 +11,12 @@ import (
 
 func main() {
 	bus := ksbus.NewServer(ksbus.ServerOpts{
-		ID:      "master",
-		Address: ":9313",
-		// WithRPCAddress: ":9314",
+		ID:             "master",
+		Address:        ":9313",
+		WithRPCAddress: ":9314",
+		OnId: func(data map[string]any) {
+			fmt.Println("OnId:", data)
+		},
 	})
 
 	app := bus.App
@@ -21,24 +24,14 @@ func main() {
 	app.LocalStatics("JS", "/js")
 	lg.CheckError(app.LocalTemplates("examples/client-js"))
 
-	// bus.OnDataWs(func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error {
-	// 	fmt.Println("srv OnDataWS:", data)
-	// 	return nil
-	// })
-
-	// bus.OnId(func(data map[string]any) {
-	// 	fmt.Println("srv OnId:", data)
-	// })
-
 	bus.Subscribe("server1", func(data map[string]any, unsub ksbus.Unsub) {
-		for i := 0; i < 50; i++ {
-			time.Sleep(500 * time.Millisecond)
+		fmt.Println("got on topic server1", data)
+		for i := 0; i < 5; i++ {
+			time.Sleep(50 * time.Millisecond)
 			bus.Publish("py", map[string]any{
 				"msg": "got you",
 			})
 		}
-
-		// unsub.Unsubscribe()
 	})
 
 	app.Get("/", func(c *ksmux.Context) {
@@ -46,14 +39,13 @@ func main() {
 	})
 
 	app.Get("/pp", func(c *ksmux.Context) {
-		bus.PublishToIDWaitRecv("py", map[string]any{
-			"msg": "hello from server",
-		},
-			func(data map[string]any) {
-				fmt.Println("go-client received my message, response:", data)
-			}, func(eventId, toID string) {
-				fmt.Println(toID, "didn't recv message with topic", eventId)
-			})
+		bus.PublishWaitRecv("rpc-client", map[string]any{
+			"msg": "hello from master",
+		}, func(data map[string]any) {
+			fmt.Println("success", data)
+		}, func(eventId, toID string) {
+			fmt.Println("fail", eventId, toID)
+		})
 		c.Text("ok")
 	})
 

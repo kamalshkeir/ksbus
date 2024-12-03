@@ -7,6 +7,8 @@ import (
 	"os/signal"
 	"time"
 
+	"encoding/gob"
+
 	"github.com/kamalshkeir/kmap"
 	"github.com/kamalshkeir/lg"
 )
@@ -61,6 +63,9 @@ type RPCResponse struct {
 
 // NewRPCClient creates a new RPC client connection to the bus
 func NewRPCClient(opts RPCClientOptions) (*RPCClient, error) {
+	// Register types for gob encoding
+	gob.Register(map[string]interface{}{})
+
 	if opts.Id == "" {
 		opts.Id = GenerateUUID()
 	}

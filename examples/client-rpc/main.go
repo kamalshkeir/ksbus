@@ -11,13 +11,14 @@ import (
 func main() {
 	// Create an RPC client
 	rpcClient, err := ksbus.NewRPCClient(ksbus.RPCClientOptions{
+		Id:           "rpc-client-imp",
 		Address:      "localhost:9314",
 		Autorestart:  true,
 		RestartEvery: 5 * time.Second,
-		OnDataRPC: func(data map[string]any) error {
-			fmt.Printf("RPC Client received general message: %v\n", data)
-			return nil
-		},
+		// OnDataRPC: func(data map[string]any) error {
+		// 	fmt.Printf("RPC Client received general message: %v\n", data)
+		// 	return nil
+		// },
 		OnId: func(data map[string]any, unsub ksbus.RPCSubscriber) {
 			fmt.Printf("RPC Client received message on ID: %v\n", data)
 		},
@@ -27,18 +28,19 @@ func main() {
 	}
 
 	// Subscribe to a topic with RPC client
-	subs := rpcClient.Subscribe("rpc", func(data map[string]any, unsub ksbus.RPCSubscriber) {
-		fmt.Printf("RPC Client received on test-topic: %v\n", data)
+	rpcClient.Subscribe("rpc-client", func(data map[string]any, unsub ksbus.RPCSubscriber) {
+		fmt.Printf("RPC Client received on rpc-client topic: %v\n", data)
 	})
 
 	// Publish messages using both clients
-	rpcClient.Publish("server1", map[string]any{
-		"message": "Hello meeeeeeeeeeeeeeeeeeeeee",
+	rpcClient.PublishToIDWaitRecv("master", map[string]any{
+		"message": "Hello from rpc client",
 		"time":    time.Now().String(),
+	}, func(data map[string]any) {
+		fmt.Println("success", data)
+	}, func(eventId, id string) {
+		fmt.Println("fail", eventId, id)
 	})
 
-	time.Sleep(5 * time.Second)
-	subs.Unsubscribe()
-	fmt.Println("unsubscribed------------------")
 	rpcClient.Run()
 }

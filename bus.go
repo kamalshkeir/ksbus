@@ -95,12 +95,18 @@ func (b *Bus) Publish(topic string, data map[string]any) {
 			if s.Ch != nil {
 				select {
 				case s.Ch <- data:
-				case <-time.After(100 * time.Millisecond):
+				case <-time.After(10 * time.Millisecond):
 				}
 			} else if s.Conn != nil {
 				b.mu.Lock()
-				defer b.mu.Unlock()
-				_ = s.Conn.WriteJSON(data)
+				select {
+				case <-time.After(100 * time.Millisecond):
+					b.mu.Unlock()
+					return
+				default:
+					_ = s.Conn.WriteJSON(data)
+					b.mu.Unlock()
+				}
 			}
 		}
 	}
@@ -114,8 +120,15 @@ func (b *Bus) PublishToID(id string, data map[string]any) {
 
 	if conn, ok := b.idConn.Get(id); ok {
 		b.mu.Lock()
-		defer b.mu.Unlock()
-		_ = conn.WriteJSON(data)
+		select {
+		case <-time.After(100 * time.Millisecond):
+			b.mu.Unlock()
+			return
+		default:
+			_ = conn.WriteJSON(data)
+			b.mu.Unlock()
+		}
+
 	}
 }
 

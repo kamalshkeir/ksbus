@@ -36,7 +36,7 @@ func (s *Server) unsubscribeWS(topic string, wsConn *ws.Conn) {
 		for i, s := range clients {
 			if s.Conn == wsConn {
 				clients = append(clients[:i], clients[i+1:]...)
-				s.bus.topicSubscribers.Set(topic, clients)
+				go s.bus.topicSubscribers.Set(topic, clients)
 				return
 			}
 		}
@@ -57,7 +57,7 @@ func (s *Server) removeWSFromAllTopics(wsConn *ws.Conn) {
 				break
 			}
 		}
-		return false
+		return true
 	})
 	go s.Bus.allWS.Delete(wsConn)
 	s.Bus.idConn.Range(func(key string, value *ws.Conn) bool {
@@ -68,7 +68,7 @@ func (s *Server) removeWSFromAllTopics(wsConn *ws.Conn) {
 				s.onWsClose(key)
 			}
 		}
-		return false
+		return true
 	})
 }
 
@@ -146,7 +146,6 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 						} else if cc, ok := server.Bus.allWS.Get(conn); ok {
 							v["from"] = cc
 						}
-
 						server.Publish(topic.(string), v)
 					} else {
 						_ = conn.WriteJSON(map[string]any{

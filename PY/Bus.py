@@ -61,6 +61,8 @@ class Bus:
                         self.OnOpen(self)
         except Exception as e:
             print(f"Server closed the connection: {e}")
+            if self.OnClose:
+                self.OnClose()
             if self.AutoRestart:
                 while True:
                     print(f"Reconnecting in {self.restartevery} seconds...")
@@ -187,6 +189,6 @@ class BusSubscription:
             print("error sending message:", e)
 
     def Unsubscribe(self):
-        asyncio.create_task(self.sendMessage({"action": "unsub", "topic": self.topic, "from": self.bus.id}))
+        asyncio.create_task(self.sendMessage({"action": "unsub", "topic": self.topic, "from": self.bus.Id}))
         del self.bus.topic_handlers[self.topic]
 

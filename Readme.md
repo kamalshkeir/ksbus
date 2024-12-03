@@ -198,7 +198,7 @@ func main() {
 For Python clients, you can install pkg ksbus
 
 ```sh
-pip install ksbus==1.2.9
+pip install ksbus==1.3.0
 ```
 
 

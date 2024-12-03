@@ -1,4 +1,4 @@
-# pip install ksbus==1.2.9
+# pip install ksbus==1.3.0
 from ksbus import Bus
 
 

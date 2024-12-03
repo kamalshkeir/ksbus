@@ -1,7 +1,9 @@
 package ksbus
 
 import (
+	"net"
 	"net/http"
+	"net/rpc"
 	"net/url"
 	"time"
 
@@ -24,6 +26,12 @@ type Server struct {
 	onId                    func(data map[string]any)
 	sendToServerConnections *kmap.SafeMap[string, *ws.Conn]
 	beforeUpgradeWs         func(r *http.Request) bool
+	rpcServer               *rpc.Server
+	rpcMessages             *kmap.SafeMap[string, []map[string]any]
+	rpcMaxQueueSize         int
+}
+
+type WithRpc struct {
 }
 
 type ServerOpts struct {
@@ -36,6 +44,7 @@ type ServerOpts struct {
 	OnServerData    func(data any, conn *ws.Conn)
 	OnId            func(data map[string]any)
 	OnUpgradeWs     func(r *http.Request) bool
+	WithRPCAddress  string
 	WithOtherRouter *ksmux.Router
 	WithOtherBus    *Bus
 }
@@ -76,6 +85,7 @@ func NewServer(options ...ServerOpts) *Server {
 	if opts.WithOtherRouter == nil {
 		opts.WithOtherRouter = ksmux.New()
 	}
+
 	server := Server{
 		ID:                      opts.ID,
 		Address:                 opts.Address,
@@ -88,9 +98,17 @@ func NewServer(options ...ServerOpts) *Server {
 		onServerData:            opts.OnServerData,
 		onId:                    opts.OnId,
 		beforeUpgradeWs:         opts.OnUpgradeWs,
+		rpcMessages:             kmap.New[string, []map[string]any](),
+		rpcMaxQueueSize:         1000,
 	}
 	if len(opts.BusMidws) > 0 {
 		server.busMidws = opts.BusMidws
+	}
+	if opts.WithRPCAddress != "" {
+		err := server.EnableRPC(opts.WithRPCAddress)
+		if err != nil {
+			lg.Fatal("Failed to enable RPC:", "err", err)
+		}
 	}
 	server.handleWS()
 	return &server
@@ -255,4 +273,130 @@ func (s *Server) RunTLS(cert string, certKey string) {
 
 func (s *Server) RunAutoTLS(subDomains ...string) {
 	s.App.RunAutoTLS(s.Address, subDomains...)
+}
+
+func (s *Server) EnableRPC(address string) error {
+	s.rpcServer = rpc.NewServer()
+	s.rpcMessages = kmap.New[string, []map[string]any]()
+
+	busRPC := &BusRPC{server: s}
+	err := s.rpcServer.RegisterName("BusRPC", busRPC)
+	if err != nil {
+		return err
+	}
+
+	s.rpcServer.HandleHTTP(rpc.DefaultRPCPath, rpc.DefaultDebugPath)
+
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		return err
+	}
+
+	go http.Serve(listener, nil)
+	return nil
+}
+
+type BusRPC struct {
+	server *Server
+}
+
+func (b *BusRPC) Ping(req *RPCRequest, resp *RPCResponse) error {
+	// Initialize message queue for new client
+	if _, ok := b.server.rpcMessages.Get(req.From); !ok {
+		b.server.rpcMessages.Set(req.From, []map[string]any{})
+	}
+	return nil
+}
+
+func (b *BusRPC) Subscribe(req *RPCRequest, resp *RPCResponse) error {
+	// Initialize empty message queue if not exists
+	if _, ok := b.server.rpcMessages.Get(req.From); !ok {
+		b.server.rpcMessages.Set(req.From, []map[string]any{})
+	}
+
+	b.server.Bus.Subscribe(req.Topic, func(data map[string]any, unsub Unsub) {
+		messages, _ := b.server.rpcMessages.Get(req.From)
+		if len(messages) >= b.server.rpcMaxQueueSize {
+			messages = messages[len(messages)-b.server.rpcMaxQueueSize+1:]
+		}
+		messages = append(messages, data)
+		b.server.rpcMessages.Set(req.From, messages)
+	}, func(data map[string]any) {
+		if eventID, ok := data["event_id"]; ok {
+			b.server.Bus.Publish(eventID.(string), map[string]any{
+				"ok":   "done",
+				"from": req.From,
+			})
+		}
+	})
+
+	// Store subscription for cleanup
+	if subs, ok := b.server.Bus.topicSubscribers.Get(req.Topic); ok {
+		for i := range subs {
+			if subs[i].Id == req.From {
+				resp.Data = map[string]any{"status": "already subscribed"}
+				return nil
+			}
+		}
+	}
+	return nil
+}
+
+func (b *BusRPC) Unsubscribe(req *RPCRequest, resp *RPCResponse) error {
+	if subs, ok := b.server.Bus.topicSubscribers.Get(req.Topic); ok {
+		for i := range subs {
+			if subs[i].Id == req.From {
+				subs = append(subs[:i], subs[i+1:]...)
+				b.server.Bus.topicSubscribers.Set(req.Topic, subs)
+				// Clear any pending messages for this topic
+				if messages, ok := b.server.rpcMessages.Get(req.From); ok {
+					filtered := make([]map[string]any, 0)
+					for _, msg := range messages {
+						if t, ok := msg["topic"].(string); !ok || t != req.Topic {
+							filtered = append(filtered, msg)
+						}
+					}
+					b.server.rpcMessages.Set(req.From, filtered)
+				}
+				if subs, ok := b.server.Bus.topicSubscribers.Get(req.Topic); !ok || len(subs) == 0 {
+					b.server.rpcMessages.Delete(req.From)
+				}
+				break
+			}
+		}
+	}
+	return nil
+}
+
+func (b *BusRPC) Publish(req *RPCRequest, resp *RPCResponse) error {
+	b.server.Bus.Publish(req.Topic, req.Data)
+	return nil
+}
+
+func (b *BusRPC) PublishToID(req *RPCRequest, resp *RPCResponse) error {
+	b.server.Bus.PublishToID(req.Id, req.Data)
+	return nil
+}
+
+func (b *BusRPC) RemoveTopic(req *RPCRequest, resp *RPCResponse) error {
+	b.server.Bus.RemoveTopic(req.Topic)
+	return nil
+}
+
+func (b *BusRPC) Poll(req *RPCRequest, resp *RPCResponse) error {
+	if messages, ok := b.server.rpcMessages.Get(req.From); ok && len(messages) > 0 {
+		resp.Data = messages[0]
+		// Remove the delivered message
+		b.server.rpcMessages.Set(req.From, messages[1:])
+		if len(messages) == 1 {
+			b.server.rpcMessages.Delete(req.From)
+		}
+		return nil
+	}
+	resp.Data = nil
+	return nil
+}
+
+func (s *Server) SetRPCMaxQueueSize(size int) {
+	s.rpcMaxQueueSize = size
 }

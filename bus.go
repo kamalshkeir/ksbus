@@ -57,8 +57,12 @@ func (b *Bus) Subscribe(topic string, fn func(data map[string]any, unsub Unsub),
 
 	go func() {
 		for v := range sub.Ch {
-			for _, fnData := range onData {
-				fnData(v)
+			if len(onData) > 0 {
+				for _, fnData := range onData {
+					if fnData != nil {
+						fnData(v)
+					}
+				}
 			}
 			fn(v, sub)
 		}

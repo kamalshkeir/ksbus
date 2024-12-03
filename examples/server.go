@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/kamalshkeir/ksbus"
 	"github.com/kamalshkeir/ksmux"
@@ -10,11 +11,8 @@ import (
 
 func main() {
 	bus := ksbus.NewServer(ksbus.ServerOpts{
-		Address: ":9313",
-		// OnDataWS: func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error {
-		// 	fmt.Println("srv OnDataWS:", data)
-		// 	return nil
-		// },
+		Address:        ":9313",
+		WithRPCAddress: ":9314",
 	})
 
 	app := bus.App
@@ -32,7 +30,13 @@ func main() {
 	// })
 
 	bus.Subscribe("server1", func(data map[string]any, unsub ksbus.Unsub) {
-		fmt.Println(data)
+		for i := 0; i < 50; i++ {
+			time.Sleep(500 * time.Millisecond)
+			bus.Publish("rpc", map[string]any{
+				"msg": "got you",
+			})
+		}
+
 		// unsub.Unsubscribe()
 	})
 
@@ -52,6 +56,6 @@ func main() {
 		c.Text("ok")
 	})
 
-	fmt.Println("server1 connected as", bus.ID)
+	fmt.Println("server connected AS", bus.ID)
 	bus.Run()
 }

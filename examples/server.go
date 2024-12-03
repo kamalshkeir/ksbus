@@ -11,8 +11,9 @@ import (
 
 func main() {
 	bus := ksbus.NewServer(ksbus.ServerOpts{
-		Address:        ":9313",
-		WithRPCAddress: ":9314",
+		ID:      "master",
+		Address: ":9313",
+		// WithRPCAddress: ":9314",
 	})
 
 	app := bus.App
@@ -32,7 +33,7 @@ func main() {
 	bus.Subscribe("server1", func(data map[string]any, unsub ksbus.Unsub) {
 		for i := 0; i < 50; i++ {
 			time.Sleep(500 * time.Millisecond)
-			bus.Publish("rpc", map[string]any{
+			bus.Publish("py", map[string]any{
 				"msg": "got you",
 			})
 		}
@@ -45,7 +46,7 @@ func main() {
 	})
 
 	app.Get("/pp", func(c *ksmux.Context) {
-		bus.PublishToIDWaitRecv("go-client", map[string]any{
+		bus.PublishToIDWaitRecv("py", map[string]any{
 			"msg": "hello from server",
 		},
 			func(data map[string]any) {

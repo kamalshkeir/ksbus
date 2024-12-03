@@ -201,6 +201,21 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 						"data": v,
 					}
 					if id, ok := m["id"]; ok {
+						if id.(string) == server.ID {
+							if ddd, ok := m["data"].(map[string]any); ok {
+								if eventID, ok := ddd["event_id"]; ok {
+									server.Publish(eventID.(string), map[string]any{
+										"ok":   "done",
+										"from": server.ID,
+									})
+								} else {
+									if server.onId != nil {
+										server.onId(ddd)
+									}
+								}
+								return
+							}
+						}
 						if from, ok := m["from"]; ok {
 							mm["from"] = from
 						} else if cc, ok := server.Bus.allWS.Get(conn); ok {
@@ -219,14 +234,16 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 						} else if cc, ok := server.Bus.allWS.Get(conn); ok {
 							v["from"] = cc
 						}
-						if id.(string) == server.ID && server.onId != nil {
+						if id.(string) == server.ID {
 							if eventID, ok := v["event_id"]; ok {
 								server.Publish(eventID.(string), map[string]any{
 									"ok":   "done",
 									"from": server.ID,
 								})
 							}
-							server.onId(v)
+							if server.onId != nil {
+								server.onId(v)
+							}
 							return
 						}
 						server.PublishToID(id.(string), v)

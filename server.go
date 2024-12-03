@@ -139,7 +139,8 @@ func (s *Server) WithMetrics(httpHandler http.Handler, path ...string) {
 
 func (s *Server) Subscribe(topic string, fn func(data map[string]any, unsub Unsub)) (unsub Unsub) {
 	return s.Bus.Subscribe(topic, fn, func(data map[string]any) {
-		if eventID, ok := data["event_id"]; ok {
+		id, okID := data["id"]
+		if eventID, ok := data["event_id"]; ok && okID && id == s.ID {
 			s.Publish(eventID.(string), map[string]any{
 				"ok":   "done",
 				"from": s.ID,

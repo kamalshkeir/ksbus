@@ -5,9 +5,13 @@ from ksbus import Bus
 def OnId(data):
     print("OnId:",data)
 
+def handlerPY(data,subscription):
+    print("got on py topic:",data)
+
 def OnOpen(bus):
     print("connected as ",bus.Id)
-    bus.PublishToIDWaitRecv("browser",{
+    bus.Subscribe("py",handlerPY)
+    bus.PublishToIDWaitRecv("master",{
         "data":"hi from pure python"
     },lambda data:print("OnRecv:",data),lambda event_id,id:print("OnFail:",event_id,id))
 

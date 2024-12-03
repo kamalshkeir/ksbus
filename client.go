@@ -17,6 +17,7 @@ type Client struct {
 	ServerAddr    string
 	onDataWS      func(data map[string]any, conn *ws.Conn) error
 	onId          func(data map[string]any, unsub ClientSubscriber)
+	onClose       func()
 	RestartEvery  time.Duration
 	Conn          *ws.Conn
 	Autorestart   bool
@@ -32,7 +33,8 @@ type ClientConnectOptions struct {
 	Autorestart  bool
 	RestartEvery time.Duration
 	OnDataWs     func(data map[string]any, conn *ws.Conn) error
-	OnId         func(data map[string]any, unsub ClientSubscriber) // used when client bus receive data on his ID 'client.Id'
+	OnId         func(data map[string]any, unsub ClientSubscriber)
+	OnClose      func()
 }
 
 type ClientSubscriber struct {
@@ -61,6 +63,7 @@ func NewClient(opts ClientConnectOptions) (*Client, error) {
 		topicHandlers: kmap.New[string, func(map[string]any, ClientSubscriber)](),
 		onDataWS:      opts.OnDataWs,
 		onId:          opts.OnId,
+		onClose:       opts.OnClose,
 		Done:          make(chan struct{}),
 	}
 	if cl.Id == "" {
@@ -89,15 +92,14 @@ func (client *Client) connect(opts ClientConnectOptions) error {
 	c, resp, err := ws.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		if client.Autorestart {
-			lg.Info("Restarting")
+			lg.Info("Connection failed, retrying in", "seconds", client.RestartEvery.Seconds())
 			time.Sleep(client.RestartEvery)
-			RestartSelf()
+			return client.connect(opts)
 		}
 		if err == ws.ErrBadHandshake {
 			lg.DebugC("handshake failed with status", "status", resp.StatusCode)
 			return err
 		}
-
 		if err == ws.ErrCloseSent {
 			lg.DebugC("server connection closed with status", "status", resp.StatusCode)
 			return err
@@ -114,7 +116,6 @@ func (client *Client) connect(opts ClientConnectOptions) error {
 	})
 	client.handle()
 	lg.Printfs("client connected to %s\n", u.String())
-
 	return nil
 }
 
@@ -305,6 +306,9 @@ func (client *Client) RemoveTopic(topic string) {
 }
 
 func (client *Client) Close() error {
+	if client.onClose != nil {
+		client.onClose()
+	}
 	err := client.Conn.WriteMessage(ws.CloseMessage, ws.FormatCloseMessage(ws.CloseNormalClosure, ""))
 	if err != nil {
 		return err
@@ -342,16 +346,26 @@ func (client *Client) handleData(fn func(data map[string]any, sub ClientSubscrib
 				err := client.Conn.ReadJSON(&message)
 				if err != nil && (err == ws.ErrCloseSent || strings.Contains(err.Error(), "forcibly closed")) {
 					if client.Autorestart {
-						lg.Printfs("grRestarting\n")
+						lg.Info("Connection lost, attempting to reconnect in", "seconds", client.RestartEvery.Seconds())
 						time.Sleep(client.RestartEvery)
-						RestartSelf()
+						opts := ClientConnectOptions{
+							Address:      client.ServerAddr,
+							Autorestart:  client.Autorestart,
+							RestartEvery: client.RestartEvery,
+							OnDataWs:     client.onDataWS,
+							OnId:         client.onId,
+							OnClose:      client.onClose,
+						}
+						if err := client.connect(opts); err != nil {
+							lg.Error("Failed to reconnect", "err", err)
+							continue
+						}
+						lg.Info("Successfully reconnected")
+						continue
 					} else {
 						lg.Printfs("rdClosed connection error:%v\n", err)
 						return
 					}
-				} else if err != nil {
-					lg.Printfs("rdOnData error:%v\n", err)
-					return
 				}
 				err = client.onDataWS(message, client.Conn)
 				if err == nil {
@@ -370,4 +384,8 @@ func (client *Client) handleData(fn func(data map[string]any, sub ClientSubscrib
 			}
 		}
 	}()
+}
+
+func (client *Client) OnClose(fn func()) {
+	client.onClose = fn
 }

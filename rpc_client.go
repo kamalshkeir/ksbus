@@ -21,6 +21,7 @@ type RPCClient struct {
 	topicHandlers *kmap.SafeMap[string, func(map[string]any, RPCSubscriber)]
 	onId          func(data map[string]any, unsub RPCSubscriber)
 	onDataRPC     func(data map[string]any) error
+	onClose       func()
 	Autorestart   bool
 	RestartEvery  time.Duration
 	Done          chan struct{}
@@ -42,6 +43,7 @@ type RPCClientOptions struct {
 	Address      string // RPC server address (e.g. "localhost:9314")
 	OnId         func(data map[string]any, unsub RPCSubscriber)
 	OnDataRPC    func(data map[string]any) error
+	OnClose      func()
 	Autorestart  bool
 	RestartEvery time.Duration
 }
@@ -82,6 +84,7 @@ func NewRPCClient(opts RPCClientOptions) (*RPCClient, error) {
 		topicHandlers: kmap.New[string, func(map[string]any, RPCSubscriber)](),
 		onId:          opts.OnId,
 		onDataRPC:     opts.OnDataRPC,
+		onClose:       opts.OnClose,
 		Autorestart:   opts.Autorestart,
 		RestartEvery:  opts.RestartEvery,
 		Done:          make(chan struct{}),
@@ -105,7 +108,13 @@ func (c *RPCClient) connect() error {
 		if c.Autorestart {
 			lg.Info("Connection failed, will retry in", "seconds", c.RestartEvery.Seconds())
 			time.Sleep(c.RestartEvery)
-			return c.connect()
+			err := c.connect()
+			if err != nil {
+				lg.Error("Failed to reconnect", "err", err)
+				return err
+			}
+			lg.Info("Successfully reconnected")
+			return nil
 		}
 		return err
 	}
@@ -117,7 +126,13 @@ func (c *RPCClient) connect() error {
 		if c.Autorestart {
 			lg.Info("Ping failed, will retry in", "seconds", c.RestartEvery.Seconds())
 			time.Sleep(c.RestartEvery)
-			return c.connect()
+			err := c.connect()
+			if err != nil {
+				lg.Error("Failed to reconnect", "err", err)
+				return err
+			}
+			lg.Info("Successfully reconnected")
+			return nil
 		}
 		return err
 	}
@@ -287,7 +302,15 @@ func (c *RPCClient) RemoveTopic(topic string) {
 }
 
 func (c *RPCClient) Close() error {
+	if c.onClose != nil {
+		c.onClose()
+	}
 	return c.conn.Close()
+}
+
+// OnClose sets the callback function to be called when the connection is closed
+func (c *RPCClient) OnClose(fn func()) {
+	c.onClose = fn
 }
 
 // listen continuously polls for messages from the server
@@ -309,6 +332,9 @@ func (c *RPCClient) listen() {
 			if err != nil {
 				if errors.Is(err, rpc.ErrShutdown) {
 					lg.ErrorC(err.Error())
+					if c.onClose != nil {
+						c.onClose()
+					}
 					if c.Autorestart {
 						lg.Info("Connection lost, attempting to reconnect in", "seconds", c.RestartEvery.Seconds())
 						time.Sleep(c.RestartEvery)

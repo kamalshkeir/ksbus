@@ -45,7 +45,7 @@ type WithRpc struct {
 type ServerOpts struct {
 	ID              string
 	Address         string
-	Path            string
+	BusPath         string
 	BusMidws        []func(ksmux.Handler) ksmux.Handler
 	OnWsClose       func(connID string)
 	OnDataWS        func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error
@@ -61,7 +61,7 @@ func NewDefaultServerOptions() ServerOpts {
 	return ServerOpts{
 		ID:              GenerateUUID(),
 		Address:         ":9313",
-		Path:            "/ws/bus",
+		BusPath:         "/ws/bus",
 		WithOtherRouter: ksmux.New(),
 		WithOtherBus:    New(),
 		OnUpgradeWs:     func(r *http.Request) bool { return true },
@@ -81,14 +81,14 @@ func NewServer(options ...ServerOpts) *Server {
 	if opts.Address == "" {
 		opts.Address = ":9313"
 	}
-	if opts.Path == "" {
-		opts.Path = "/ws/bus"
+	if opts.BusPath == "" {
+		opts.BusPath = "/ws/bus"
 	}
 	if opts.WithOtherBus == nil {
 		opts.WithOtherBus = New()
 	}
-	if opts.OnUpgradeWs == nil {
-		opts.OnUpgradeWs = func(r *http.Request) bool { return true }
+	if opts.OnUpgradeWs != nil {
+		ws.DefaultUpgraderKSMUX.CheckOrigin = opts.OnUpgradeWs
 	}
 	if opts.WithOtherRouter == nil {
 		opts.WithOtherRouter = ksmux.New()
@@ -97,7 +97,7 @@ func NewServer(options ...ServerOpts) *Server {
 	server := Server{
 		ID:                      opts.ID,
 		Address:                 opts.Address,
-		Path:                    opts.Path,
+		Path:                    opts.BusPath,
 		Bus:                     opts.WithOtherBus,
 		App:                     opts.WithOtherRouter,
 		sendToServerConnections: kmap.New[string, *ws.Conn](),
@@ -154,6 +154,7 @@ func (s *Server) Subscribe(topic string, fn func(data map[string]any, unsub Unsu
 				"from": s.ID,
 			})
 		}
+		delete(data, "event_id")
 	})
 }
 

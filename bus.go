@@ -64,6 +64,13 @@ func (b *Bus) Subscribe(topic string, fn func(data map[string]any, unsub Unsub),
 					}
 				}
 			}
+			if eventID, ok := v["event_id"]; ok {
+				b.Publish(eventID.(string), map[string]any{
+					"ok":   "done",
+					"from": "INTERNAL",
+				})
+				delete(v, "event_id")
+			}
 			fn(v, sub)
 		}
 	}()

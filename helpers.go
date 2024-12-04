@@ -84,7 +84,6 @@ func (s *Server) GetSubscribers(topic string) []Subscriber {
 }
 
 func (server *Server) handleWS() {
-	ws.FuncBeforeUpgradeWS = server.beforeUpgradeWs
 	handler := handlerBusWs(server)
 	if len(server.busMidws) > 0 {
 		for _, h := range server.busMidws {

@@ -392,21 +392,6 @@ func (b *BusRPC) Publish(req *RPCRequest, resp *RPCResponse) error {
 		}
 	}
 
-	// Handle RPC subscribers for this topic
-	if subs, ok := b.server.Bus.topicSubscribers.Get(req.Topic); ok {
-		for _, sub := range subs {
-			if sub.Ch != nil { // RPC subscriber
-				select {
-				case sub.Ch <- msg:
-				default:
-					// Channel full, remove oldest message
-					<-sub.Ch
-					sub.Ch <- msg
-				}
-			}
-		}
-	}
-
 	b.server.Bus.Publish(req.Topic, msg)
 	return nil
 }

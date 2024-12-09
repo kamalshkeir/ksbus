@@ -32,15 +32,24 @@ func main() {
 		fmt.Printf("RPC Client received on rpc-client topic: %v\n", data)
 	})
 
+	go func() {
+		for i := 0; i < 50; i++ {
+			rpcClient.PublishToID("master", map[string]any{
+				"msg": "hello from rpc",
+			})
+			time.Sleep(time.Second)
+		}
+	}()
+
 	// Publish messages using both clients
-	rpcClient.PublishToIDWaitRecv("master", map[string]any{
-		"message": "Hello from rpc client",
-		"time":    time.Now().String(),
-	}, func(data map[string]any) {
-		fmt.Println("success", data)
-	}, func(eventId, id string) {
-		fmt.Println("fail", eventId, id)
-	})
+	// rpcClient.PublishToIDWaitRecv("master", map[string]any{
+	// 	"message": "Hello from rpc client",
+	// 	"time":    time.Now().String(),
+	// }, func(data map[string]any) {
+	// 	fmt.Println("success", data)
+	// }, func(eventId, id string) {
+	// 	fmt.Println("fail", eventId, id)
+	// })
 
 	rpcClient.Run()
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/kamalshkeir/ksbus"
 	"github.com/kamalshkeir/ksmux"
@@ -26,12 +25,6 @@ func main() {
 
 	bus.Subscribe("server1", func(data map[string]any, unsub ksbus.Unsub) {
 		fmt.Println("got on topic server1", data)
-		for i := 0; i < 5; i++ {
-			time.Sleep(50 * time.Millisecond)
-			bus.Publish("py", map[string]any{
-				"msg": "got you",
-			})
-		}
 	})
 
 	app.Get("/", func(c *ksmux.Context) {

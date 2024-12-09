@@ -14,7 +14,7 @@ KSBus is a zero-configuration event bus written in Go, designed to facilitate re
 To install KSBus, use the following command:
 
 ```sh
-go get github.com/kamalshkeir/ksbus@v1.4.2
+go get github.com/kamalshkeir/ksbus@v1.4.3
 ```
 
 ## Usage

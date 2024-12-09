@@ -22,6 +22,9 @@ func main() {
 		OnId: func(data map[string]any, unsub ksbus.RPCSubscriber) {
 			fmt.Printf("RPC Client received message on ID: %v\n", data)
 		},
+		OnClose: func() {
+			fmt.Println("closing")
+		},
 	})
 	if err != nil {
 		log.Fatal("Failed to create RPC client:", err)
@@ -34,7 +37,7 @@ func main() {
 
 	go func() {
 		for i := 0; i < 50; i++ {
-			rpcClient.PublishToID("master", map[string]any{
+			rpcClient.PublishToID("browser", map[string]any{
 				"msg": "hello from rpc",
 			})
 			time.Sleep(time.Second)

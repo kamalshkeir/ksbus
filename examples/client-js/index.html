@@ -9,8 +9,14 @@
 
 <body>
     <h1>Index</h1>
-    <input type="text" id="inpp">
-    <button type="button" id="btn">Send</button>
+    <div class="ff">
+        <input type="text" id="inpp" aria-placeholder="Publish To ID">
+        <button type="button" id="btn">Send To ID</button>
+    </div>
+    <div class="ff">
+        <input type="text" id="inppPub" aria-placeholder="Publish">
+        <button type="button" id="btnPub">Send</button>
+    </div>
     <script src="/js/Bus.js"></script>
     <script>
         let bus = new Bus({ Id: "browser" });
@@ -24,7 +30,15 @@
             console.log("connected", bus.Id)
             btn.addEventListener("click", (e) => {
                 e.preventDefault();
-                bus.PublishToIDWaitRecv(inpp.value, { "cxwcwxcc": "hi from browser" }, (data) => {
+                bus.PublishToIDWaitRecv(inpp.value, { "msg": "hi from browser" }, (data) => {
+                    console.log("onRecv:", data)
+                }, (eventID, id) => {
+                    console.log(`${id} did not receive ${eventID}`);
+                })
+            })
+            btnPub.addEventListener("click", (e) => {
+                e.preventDefault();
+                bus.PublishWaitRecv(inppPub.value, { "msg": "hi from browser" }, (data) => {
                     console.log("onRecv:", data)
                 }, (eventID, id) => {
                     console.log(`${id} did not receive ${eventID}`);

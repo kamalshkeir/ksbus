@@ -130,6 +130,7 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					mm := map[string]any{
 						"data": v,
 					}
+
 					if topic, ok := m["topic"]; ok {
 						mm["topic"] = topic.(string)
 						server.Publish(topic.(string), mm)
@@ -139,6 +140,14 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 						})
 					}
 				case map[string]any:
+					if data, ok := m["data"].(map[string]any); ok {
+						if eventID, ok := data["event_id"].(string); ok {
+							server.Publish(eventID, map[string]any{
+								"ok":   "done",
+								"from": server.ID,
+							})
+						}
+					}
 					if topic, ok := m["topic"]; ok {
 						if from, ok := m["from"]; ok {
 							v["from"] = from

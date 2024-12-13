@@ -7,8 +7,8 @@ github.com/kamalshkeir/kmap v1.1.4 h1:fvhMBz0DfqMlbGXjpfws+sRSxd6xtKawLgT34Gs3rb
 github.com/kamalshkeir/kmap v1.1.4/go.mod h1:SLSllMqrhSTJtgYd14nXeFZ/shp9AY4t20YGCtlcziI=
 github.com/kamalshkeir/ksmux v0.4.1 h1:GfQUFrLpgVKZjuNAu71cgXma44QRjbgw7YDOL8EfucM=
 github.com/kamalshkeir/ksmux v0.4.1/go.mod h1:soNW+O2Q2ZLd5iTbYDAErQaCbDxQ+8QzvVu+l7lBGiI=
-github.com/kamalshkeir/kstrct v1.9.11 h1:YnJ6GiYKru/NGeX1TSC2PcPStYaz/4/j0KgAZKxjK64=
-github.com/kamalshkeir/kstrct v1.9.11/go.mod h1:IwEFF8tcawA98RtrUKAiep0UX65zE4Z/zNNJfUYVyKk=
+github.com/kamalshkeir/kstrct v1.9.12 h1:He2gPRBNflurAFM/MfIcblCX2i9om98vAFzd8hp9I3Y=
+github.com/kamalshkeir/kstrct v1.9.12/go.mod h1:IwEFF8tcawA98RtrUKAiep0UX65zE4Z/zNNJfUYVyKk=
 github.com/kamalshkeir/lg v0.1.3 h1:tvJFw6wI2MlZI82EK7hAgyDIKkbZpUOr43jqQayKGR8=
 github.com/kamalshkeir/lg v0.1.3/go.mod h1:Ub/kxOdgleTDhDBXtFXXxO/XOHR/zt+6pvTIJNtuhew=
 golang.org/x/crypto v0.30.0 h1:RwoQn3GkWiMkzlX562cLB7OxWvjH1L8xutO2WoJcRoY=

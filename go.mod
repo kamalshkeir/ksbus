@@ -11,7 +11,7 @@ require (
 require (
 	github.com/kamalshkeir/kasm v0.0.2 // indirect
 	github.com/kamalshkeir/kencoding v0.0.1 // indirect
-	github.com/kamalshkeir/kstrct v1.9.11 // indirect
+	github.com/kamalshkeir/kstrct v1.9.12 // indirect
 	golang.org/x/crypto v0.30.0 // indirect
 	golang.org/x/net v0.32.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect

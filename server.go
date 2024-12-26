@@ -25,7 +25,7 @@ type Server struct {
 	busMidws                []func(ksmux.Handler) ksmux.Handler
 	onWsClose               func(connID string)
 	onDataWS                func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error
-	onServerData            func(data any, conn *ws.Conn)
+	onServerData            []func(data any, conn *ws.Conn)
 	onId                    func(data map[string]any)
 	sendToServerConnections *kmap.SafeMap[string, *ws.Conn]
 	beforeUpgradeWs         func(r *http.Request) bool
@@ -49,7 +49,7 @@ type ServerOpts struct {
 	BusMidws        []func(ksmux.Handler) ksmux.Handler
 	OnWsClose       func(connID string)
 	OnDataWS        func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error
-	OnServerData    func(data any, conn *ws.Conn)
+	OnServerData    []func(data any, conn *ws.Conn)
 	OnId            func(data map[string]any)
 	OnUpgradeWs     func(r *http.Request) bool
 	WithRPCAddress  string
@@ -93,6 +93,9 @@ func NewServer(options ...ServerOpts) *Server {
 	if opts.WithOtherRouter == nil {
 		opts.WithOtherRouter = ksmux.New()
 	}
+	if len(opts.OnServerData) == 0 {
+		opts.OnServerData = []func(data any, conn *ws.Conn){}
+	}
 
 	server := Server{
 		ID:                      opts.ID,
@@ -127,7 +130,7 @@ func (s *Server) OnWsClose(fn func(connID string)) {
 }
 
 func (s *Server) OnServerData(fn func(data any, conn *ws.Conn)) {
-	s.onServerData = fn
+	s.onServerData = append(s.onServerData, fn)
 }
 
 func (s *Server) OnDataWs(fn func(data map[string]any, conn *ws.Conn, originalRequest *http.Request) error) {

@@ -196,7 +196,9 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 			if server.onServerData != nil {
 				if data, ok := m["data"]; ok {
 					if addr, ok := m["addr"]; ok && strings.Contains(addr.(string), server.Address) {
-						server.onServerData(data, conn)
+						for _, fn := range server.onServerData {
+							fn(data, conn)
+						}
 					}
 				}
 			}
@@ -274,7 +276,9 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 					}
 					if addr, ok := m["addr"].(string); ok {
 						if strings.Contains(addr, server.Address) {
-							server.onServerData(mm, conn)
+							for _, fn := range server.onServerData {
+								fn(mm, conn)
+							}
 							return
 						}
 					}
@@ -296,7 +300,9 @@ func (server *Server) handleActions(m map[string]any, conn *ws.Conn) {
 				case map[string]any:
 					if addr, ok := m["addr"].(string); ok {
 						if strings.Contains(addr, server.Address) {
-							server.onServerData(m, conn)
+							for _, fn := range server.onServerData {
+								fn(m, conn)
+							}
 							return
 						}
 					}

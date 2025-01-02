@@ -1,7 +1,7 @@
 github.com/kamalshkeir/kmap v1.1.4 h1:fvhMBz0DfqMlbGXjpfws+sRSxd6xtKawLgT34Gs3rbE=
 github.com/kamalshkeir/kmap v1.1.4/go.mod h1:SLSllMqrhSTJtgYd14nXeFZ/shp9AY4t20YGCtlcziI=
-github.com/kamalshkeir/ksmux v0.5.1 h1:t4GBYalqWkOjTtsQlnphVkpGr1QhFq4QQRFn0RgweO8=
-github.com/kamalshkeir/ksmux v0.5.1/go.mod h1:raSzFAn3D3qQp7SfWzcubDBUT+6ob0aTgFC/3vvIiOQ=
+github.com/kamalshkeir/ksmux v0.5.2 h1:GbGfn9YI1X2RzUmStpXboH+UtjbhhZRk8pESurtTvt0=
+github.com/kamalshkeir/ksmux v0.5.2/go.mod h1:raSzFAn3D3qQp7SfWzcubDBUT+6ob0aTgFC/3vvIiOQ=
 github.com/kamalshkeir/kstrct v1.9.16 h1:uPHJcBFs0eM31yKxAx2lOAZuyGkVrJ+hVODVNUJh8Bs=
 github.com/kamalshkeir/kstrct v1.9.16/go.mod h1:IwEFF8tcawA98RtrUKAiep0UX65zE4Z/zNNJfUYVyKk=
 github.com/kamalshkeir/lg v0.1.3 h1:tvJFw6wI2MlZI82EK7hAgyDIKkbZpUOr43jqQayKGR8=

@@ -1,15 +1,15 @@
 module github.com/kamalshkeir/ksbus
 
-go 1.23.0
+go 1.23.4
 
 require (
-	github.com/kamalshkeir/kmap v1.1.4
-	github.com/kamalshkeir/ksmux v0.5.2
+	github.com/kamalshkeir/kmap v1.1.6
+	github.com/kamalshkeir/ksmux v0.5.3
 	github.com/kamalshkeir/lg v0.1.3
 )
 
 require (
-	github.com/kamalshkeir/kstrct v1.9.16 // indirect
+	github.com/kamalshkeir/kstrct v1.9.17 // indirect
 	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/text v0.21.0 // indirect

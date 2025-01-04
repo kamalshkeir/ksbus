@@ -3,7 +3,7 @@ module github.com/kamalshkeir/ksbus
 go 1.23.4
 
 require (
-	github.com/kamalshkeir/kmap v1.1.6
+	github.com/kamalshkeir/kmap v1.1.7
 	github.com/kamalshkeir/ksmux v0.5.3
 	github.com/kamalshkeir/lg v0.1.3
 )

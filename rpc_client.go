@@ -81,7 +81,7 @@ func NewRPCClient(opts RPCClientOptions) (*RPCClient, error) {
 	client := &RPCClient{
 		Id:            opts.Id,
 		ServerAddr:    opts.Address,
-		topicHandlers: kmap.New[string, func(map[string]any, RPCSubscriber)](),
+		topicHandlers: kmap.New[string, func(map[string]any, RPCSubscriber)](20),
 		onId:          opts.OnId,
 		onDataRPC:     opts.OnDataRPC,
 		onClose:       opts.OnClose,

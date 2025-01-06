@@ -60,7 +60,7 @@ func NewClient(opts ClientConnectOptions) (*Client, error) {
 		Id:            opts.Id,
 		Autorestart:   opts.Autorestart,
 		RestartEvery:  opts.RestartEvery,
-		topicHandlers: kmap.New[string, func(map[string]any, ClientSubscriber)](),
+		topicHandlers: kmap.New[string, func(map[string]any, ClientSubscriber)](20),
 		onDataWS:      opts.OnDataWs,
 		onId:          opts.OnId,
 		onClose:       opts.OnClose,

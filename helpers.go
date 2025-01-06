@@ -95,10 +95,11 @@ func (server *Server) handleWS() {
 
 func handlerBusWs(server *Server) ksmux.Handler {
 	return func(c *ksmux.Context) {
-		conn, err := ksmux.UpgradeConnection(c.ResponseWriter, c.Request, nil)
+		conn, err := c.UpgradeConnection()
 		if lg.CheckError(err) {
 			return
 		}
+		defer conn.Close()
 		for {
 			var m map[string]any
 			err := conn.ReadJSON(&m)

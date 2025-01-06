@@ -60,7 +60,7 @@ type ServerOpts struct {
 func NewDefaultServerOptions() ServerOpts {
 	return ServerOpts{
 		ID:              GenerateUUID(),
-		Address:         ":9313",
+		Address:         "localhost:9313",
 		BusPath:         "/ws/bus",
 		WithOtherRouter: ksmux.New(),
 		WithOtherBus:    New(),
@@ -79,7 +79,7 @@ func NewServer(options ...ServerOpts) *Server {
 		opts.ID = GenerateUUID()
 	}
 	if opts.Address == "" {
-		opts.Address = ":9313"
+		opts.Address = "localhost:9313"
 	}
 	if opts.BusPath == "" {
 		opts.BusPath = "/ws/bus"
@@ -91,7 +91,15 @@ func NewServer(options ...ServerOpts) *Server {
 		ws.DefaultUpgraderKSMUX.CheckOrigin = opts.OnUpgradeWs
 	}
 	if opts.WithOtherRouter == nil {
-		opts.WithOtherRouter = ksmux.New()
+		opts.WithOtherRouter = ksmux.New(ksmux.Config{
+			Address: opts.Address,
+		})
+	} else {
+		if opts.WithOtherRouter.Address() != "" {
+			opts.Address = opts.WithOtherRouter.Address()
+		} else if opts.WithOtherRouter.Config.Domain != "" {
+			opts.Address = opts.WithOtherRouter.Config.Domain
+		}
 	}
 	if len(opts.OnServerData) == 0 {
 		opts.OnServerData = []func(data any, conn *ws.Conn){}
@@ -103,13 +111,13 @@ func NewServer(options ...ServerOpts) *Server {
 		Path:                    opts.BusPath,
 		Bus:                     opts.WithOtherBus,
 		App:                     opts.WithOtherRouter,
-		sendToServerConnections: kmap.New[string, *ws.Conn](),
+		sendToServerConnections: kmap.New[string, *ws.Conn](20),
 		onWsClose:               opts.OnWsClose,
 		onDataWS:                opts.OnDataWS,
 		onServerData:            opts.OnServerData,
 		onId:                    opts.OnId,
 		beforeUpgradeWs:         opts.OnUpgradeWs,
-		idConnRPC:               kmap.New[string, *RPCConn](),
+		idConnRPC:               kmap.New[string, *RPCConn](10),
 		rpcMaxQueueSize:         1000,
 	}
 	if len(opts.BusMidws) > 0 {
@@ -297,15 +305,15 @@ func (s *Server) PublishToServer(addr string, data map[string]any, secure ...boo
 
 // RUN
 func (s *Server) Run() {
-	s.App.Run(s.Address)
+	s.App.Run()
 }
 
-func (s *Server) RunTLS(cert string, certKey string) {
-	s.App.RunTLS(s.Address, cert, certKey)
+func (s *Server) RunTLS() {
+	s.App.RunTLS()
 }
 
-func (s *Server) RunAutoTLS(subDomains ...string) {
-	s.App.RunAutoTLS(s.Address, subDomains...)
+func (s *Server) RunAutoTLS() {
+	s.App.RunAutoTLS()
 }
 
 func (s *Server) EnableRPC(address string) error {

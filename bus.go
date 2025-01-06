@@ -34,9 +34,9 @@ type Bus struct {
 // New return new Bus
 func New() *Bus {
 	return &Bus{
-		topicSubscribers: kmap.New[string, []Subscriber](),
-		allWS:            kmap.New[*ws.Conn, string](),
-		idConn:           kmap.New[string, *ws.Conn](),
+		topicSubscribers: kmap.New[string, []Subscriber](25),
+		allWS:            kmap.New[*ws.Conn, string](25),
+		idConn:           kmap.New[string, *ws.Conn](20),
 	}
 }
 
